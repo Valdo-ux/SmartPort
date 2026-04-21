@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pelabuhan Pintar - Telaga Punggur</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container navbar-content">
+            <div class="brand">
+                <h1>Pelabuhan Pintar</h1>
+                <p>Pelabuhan Telaga Punggur</p>
+            </div>
+            <div class="nav-buttons">
+                <button class="btn btn-outline">Cek Booking</button>
+                <button class="btn btn-login">Log in</button>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-overlay"></div>
+        <div class="container hero-content">
+            <div class="hero-text">
+                <h2>Selamat Datang di Sistem Pelabuhan Pintar</h2>
+                <p>Monitoring Arus Kendaraan Secara Real-Time</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="booking-section">
+        <div class="container">
+            <div class="booking-card">
+                <form id="bookingForm" class="booking-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Pelabuhan Tujuan</label>
+                            <select id="tujuan" required>
+                                <option value="">Pilih Tujuan</option>
+                                <option value="Semarang">Semarang</option>
+                                <option value="Surabaya">Surabaya</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Jenis Pengguna</label>
+                            <select id="jenisPengguna" required>
+                                <option value="">Berkendara / Tidak?</option>
+                                <option value="Berkendara">Berkendara</option>
+                                <option value="Tidak">Tidak Berkendara</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Penumpang</label>
+                            <select id="penumpang" required>
+                                <option value="">Pilih Jumlah</option>
+                                <option value="1">1 Orang</option>
+                                <option value="2">2 Orang</option>
+                                <option value="3">3 Orang</option>
+                                <option value="4+">4+ Orang</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Kelas Layanan</label>
+                            <select id="kelas" required>
+                                <option value="">Pilih Kelas</option>
+                                <option value="Ekonomi">Ekonomi</option>
+                                <option value="Bisnis">Bisnis</option>
+                                <option value="Eksekutif">Eksekutif</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Jadwal Pelabuhan</label>
+                            <select id="jadwal" required>
+                                <option value="">Pilih Jadwal</option>
+                                <option value="08:00">08:00</option>
+                                <option value="12:00">12:00</option>
+                                <option value="16:00">16:00</option>
+                                <option value="20:00">20:00</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Cari Jadwal</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <script src="/js/app.js"></script>
+
+<script>
+// Cek apakah user sudah login
+const user = localStorage.getItem('user');
+if (user) {
+    const userData = JSON.parse(user);
+    document.querySelector('.nav-buttons').innerHTML = `
+        <span style="color: #0284c7; font-weight: 600;">Halo, ${userData.nama}!</span>
+        <button class="btn btn-outline" onclick="logout()">Logout</button>
+    `;
+}
+
+function logout() {
+    localStorage.removeItem('user');
+    window.location.reload();
+}
+</script>
+
+</body>
+</html>

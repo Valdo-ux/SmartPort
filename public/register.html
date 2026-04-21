@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registrasi - Pelabuhan Pintar</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container navbar-content">
+            <div class="brand">
+                <h1>Pelabuhan Pintar</h1>
+                <p>Pelabuhan Telaga Punggur</p>
+            </div>
+            <div class="nav-buttons">
+                <a href="/login" class="btn btn-outline">Cek Booking</a>
+                <button class="btn btn-login" onclick="window.location.href='/login'">Log in</button>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-overlay"></div>
+        <div class="container hero-content">
+            <div class="hero-text">
+                <h2>Selamat Datang di Sistem Pelabuhan Pintar</h2>
+                <p>Monitoring Arus Kendaraan Secara Real-Time</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="auth-section">
+        <div class="container">
+            <div class="auth-card">
+                <h3>Registrasi</h3>
+                <form id="registerForm" class="auth-form">
+                    <div class="form-group">
+                        <label for="nama">Nama</label>
+                        <input type="text" id="nama" name="nama" required placeholder="Masukkan nama lengkap">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email">Alamat E-mail</label>
+                        <input type="email" id="email" name="email" required placeholder="contoh@email.com">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="no_hp">No Hp.</label>
+                        <input type="tel" id="no_hp" name="no_hp" placeholder="08xxxxxxxxxx">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" required placeholder="Minimal 6 karakter">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="confirm_password">Konfirmasi Password</label>
+                        <input type="password" id="confirm_password" name="confirm_password" required placeholder="Ulangi password">
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Daftar Sekarang</button>
+                    </div>
+                    
+                    <p class="auth-link">
+                        Sudah punya akun? <a href="/login">Login di sini</a>
+                    </p>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <script src="/js/auth.js"></script>
+</body>
+</html>
