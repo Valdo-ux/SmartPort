@@ -180,3 +180,15 @@ app.post('/api/cari-jadwal', async (req, res) => {
 app.listen(PORT, () => {
     console.log(`🚢 Server jalan di http://localhost:${PORT}`);
 });
+
+app.get('/admin/dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views/admin/dashboard.html'));
+});
+
+app.get('/admin/jadwal', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views/admin/jadwal.html'));
+});
+
+app.get('/admin/pemesanan', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views/admin/pemesanan.html'));
+});

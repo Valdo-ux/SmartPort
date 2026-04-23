@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartPort App — Jadwal Keberangkatan</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+      display: flex;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 220px;
+      min-height: 100vh;
+      background: #0f2744;
+      display: flex;
+      flex-direction: column;
+      padding: 24px 16px;
+      gap: 8px;
+      position: fixed;
+      top: 0; left: 0;
+    }
+
+    .sidebar-logo {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+
+    .logo-circle {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .sidebar-title {
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      text-align: center;
+      line-height: 1.3;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 14px;
+      color: #a3b8d4;
+      text-decoration: none;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .nav-item.active {
+      background: rgba(255,255,255,0.13);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .nav-item:not(.active):hover {
+      background: rgba(255,255,255,0.07);
+      color: #cdd9ea;
+    }
+
+    .nav-icon { width: 18px; height: 18px; flex-shrink: 0; }
+
+    /* ── MAIN ── */
+    .main {
+      margin-left: 220px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      background: #fff;
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #e2e8f0;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .topbar-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #0f2744;
+    }
+
+    .avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: #d1dce8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── CONTENT ── */
+    .content {
+      padding: 28px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* ── TAMBAH BUTTON ── */
+    .btn-tambah {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #fff;
+      color: #0f2744;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 10px 22px;
+      border-radius: 10px;
+      border: 1.5px solid #c8d5e3;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s, border-color 0.15s;
+      width: fit-content;
+    }
+
+    .btn-tambah:hover {
+      background: #f0f6ff;
+      border-color: #1e6fb5;
+      color: #1e6fb5;
+    }
+
+    /* ── TABLE SECTION ── */
+    .table-section {
+      background: #fff;
+      border-radius: 18px;
+      border: 1px solid #e8edf3;
+      padding: 24px 28px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    }
+
+    .table-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #0f2744;
+      margin-bottom: 18px;
+    }
+
+    .table-wrapper { overflow-x: auto; }
+
+    .sp-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    .sp-table thead tr { background: #1e3a5f; }
+
+    .sp-table thead th {
+      color: #fff;
+      font-weight: 600;
+      padding: 13px 16px;
+      text-align: left;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .sp-table thead th:first-child { border-radius: 12px 0 0 12px; }
+    .sp-table thead th:last-child  { border-radius: 0 12px 12px 0; }
+
+    .sp-table tbody tr { border-bottom: 1px solid #f0f4f8; }
+    .sp-table tbody tr:last-child { border-bottom: none; }
+
+    .sp-table tbody td {
+      padding: 15px 16px;
+      color: #334155;
+    }
+
+    .sp-table tbody tr:hover td { background: #f8fafc; }
+
+    .time-cell {
+      color: #0f2744;
+      font-weight: 700;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .badge-berangkat { background: #dcfce7; color: #166534; }
+    .badge-terjadwal { background: #e0f2fe; color: #075985; }
+
+    /* ── ACTION BUTTONS ── */
+    .btn-edit, .btn-hapus {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.15s;
+    }
+
+    .btn-edit {
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+
+    .btn-hapus {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+
+    .btn-edit:hover, .btn-hapus:hover { opacity: 0.8; }
+
+    .action-cell {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    /* ── MODAL ── */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-backdrop.show { display: flex; }
+
+    .modal {
+      background: #fff;
+      border-radius: 18px;
+      padding: 28px 32px;
+      width: 460px;
+      max-width: 95vw;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #0f2744;
+      margin-bottom: 22px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group.full { grid-column: 1 / -1; }
+
+    .form-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .form-input, .form-select {
+      padding: 10px 14px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 14px;
+      color: #0f2744;
+      background: #f8fafc;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .form-input:focus, .form-select:focus {
+      border-color: #1e6fb5;
+      background: #fff;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .btn-cancel {
+      padding: 10px 22px;
+      border-radius: 10px;
+      border: 1.5px solid #e2e8f0;
+      background: #fff;
+      color: #64748b;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-save {
+      padding: 10px 22px;
+      border-radius: 10px;
+      border: none;
+      background: #0f2744;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-save:hover { background: #1e3a5f; }
+
+    /* ── CONFIRM MODAL ── */
+    .confirm-modal {
+      background: #fff;
+      border-radius: 18px;
+      padding: 28px 32px;
+      width: 360px;
+      max-width: 95vw;
+      text-align: center;
+    }
+
+    .confirm-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: #fee2e2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+    }
+
+    .confirm-title { font-size: 17px; font-weight: 700; color: #0f2744; margin-bottom: 8px; }
+    .confirm-desc  { font-size: 14px; color: #64748b; margin-bottom: 24px; }
+
+    .confirm-footer { display: flex; gap: 10px; justify-content: center; }
+
+    .btn-confirm-hapus {
+      padding: 10px 22px;
+      border-radius: 10px;
+      border: none;
+      background: #b91c1c;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    @media (max-width: 768px) {
+      .sidebar { width: 60px; padding: 16px 8px; }
+      .sidebar-title, .nav-item span { display: none; }
+      .sidebar-logo .logo-circle { width: 44px; height: 44px; }
+      .main { margin-left: 60px; }
+      .form-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-circle">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+          <path d="M10 30h28l-5-10H15L10 30z" fill="#0f2744"/>
+          <rect x="19" y="15" width="10" height="8" rx="1.5" fill="#1e6fb5"/>
+          <rect x="23" y="11" width="2" height="5" rx="1" fill="#1e6fb5"/>
+          <path d="M6 33h36" stroke="#0f2744" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="15" cy="37" r="2.5" fill="#1e6fb5"/>
+          <circle cx="24" cy="37" r="2.5" fill="#1e6fb5"/>
+          <circle cx="33" cy="37" r="2.5" fill="#1e6fb5"/>
+        </svg>
+      </div>
+      <div class="sidebar-title">Pelabuhan Pintar</div>
+    </div>
+
+    <a href="/admin/dashboard" class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+        <rect x="2" y="2" width="7" height="7" rx="1.5"/>
+        <rect x="11" y="2" width="7" height="7" rx="1.5" opacity="0.6"/>
+        <rect x="2" y="11" width="7" height="7" rx="1.5" opacity="0.6"/>
+        <rect x="11" y="11" width="7" height="7" rx="1.5" opacity="0.6"/>
+      </svg>
+      <span>Dashboard</span>
+    </a>
+
+    <a href="/admin/jadwal" class="nav-item active">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <path d="M3 5h14M3 10h14M3 15h8"/>
+      </svg>
+      <span>Jadwal Keberangkatan</span>
+    </a>
+
+    <a href="/admin/pemesanan" class="nav-item active">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="14" height="14" rx="2"/>
+        <path d="M7 7h6M7 10h6M7 13h4"/>
+      </svg>
+      <span>Pemesanan</span>
+    </a>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <h1 class="topbar-title">Jadwal Keberangkatan</h1>
+      <div class="avatar">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="8" r="4" fill="#94a3b8"/>
+          <path d="M4 20c0-4.418 3.582-7 8-7s8 2.582 8 7" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+    </header>
+
+    <!-- CONTENT -->
+    <main class="content">
+
+      <button class="btn-tambah" onclick="openModal()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        Tambah
+      </button>
+
+      <div class="table-section">
+        <div class="table-title">Jadwal keberangkatan hari ini</div>
+        <div class="table-wrapper">
+          <table class="sp-table">
+            <thead>
+              <tr>
+                <th>Waktu</th>
+                <th>Kapal</th>
+                <th>Rute</th>
+                <th>Kapasitas</th>
+                <th>Tersedia</th>
+                <th>Status</th>
+                <th>Edit</th>
+                <th>Hapus</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody">
+              <!-- Diisi oleh JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- MODAL TAMBAH / EDIT -->
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal">
+      <div class="modal-title" id="modalTitle">Tambah Jadwal</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Waktu</label>
+          <input type="time" class="form-input" id="fWaktu" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Rute</label>
+          <input type="text" class="form-input" id="fRute" placeholder="cth: Karimun" />
+        </div>
+        <div class="form-group full">
+          <label class="form-label">Nama Kapal</label>
+          <input type="text" class="form-input" id="fKapal" placeholder="cth: Kapal Jarjit Singh" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Kapasitas</label>
+          <input type="number" class="form-input" id="fKapasitas" placeholder="300" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tersedia</label>
+          <input type="number" class="form-input" id="fTersedia" placeholder="40" />
+        </div>
+        <div class="form-group full">
+          <label class="form-label">Status</label>
+          <select class="form-select" id="fStatus">
+            <option value="Terjadwal">Terjadwal</option>
+            <option value="Berangkat">Berangkat</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closeModal()">Batal</button>
+        <button class="btn-save" onclick="saveData()">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL KONFIRMASI HAPUS -->
+  <div class="modal-backdrop" id="confirmBackdrop">
+    <div class="confirm-modal">
+      <div class="confirm-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+          <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="#b91c1c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="confirm-title">Hapus Jadwal?</div>
+      <div class="confirm-desc">Data jadwal ini akan dihapus permanen dan tidak bisa dikembalikan.</div>
+      <div class="confirm-footer">
+        <button class="btn-cancel" onclick="closeConfirm()">Batal</button>
+        <button class="btn-confirm-hapus" onclick="confirmHapus()">Ya, Hapus</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let data = [
+      { id: 1, waktu: '08:00', kapal: 'Kapal Jarjit Singh', rute: 'Karimun',  kapasitas: 300, tersedia: 40, status: 'Berangkat'  },
+      { id: 2, waktu: '08:45', kapal: 'Kapal Kamijirou',   rute: 'Paradise', kapasitas: 150, tersedia: 80, status: 'Terjadwal'  },
+      { id: 3, waktu: '09:00', kapal: 'Kapal Pulu Pulu',   rute: 'Tj. Uban', kapasitas: 150, tersedia: 50, status: 'Terjadwal'  },
+      { id: 4, waktu: '10:00', kapal: 'Kapal Kapten Dzul', rute: 'Marina',   kapasitas: 200, tersedia: 60, status: 'Terjadwal'  },
+      { id: 5, waktu: '11:00', kapal: 'Kapal Izuocha',     rute: 'Surga',    kapasitas: 100, tersedia: 70, status: 'Terjadwal'  },
+    ];
+
+    let nextId = 6;
+    let editId = null;
+    let hapusId = null;
+
+    function render() {
+      const tbody = document.getElementById('tableBody');
+      const sorted = [...data].sort((a, b) => a.waktu.localeCompare(b.waktu));
+      tbody.innerHTML = sorted.map(row => `
+        <tr>
+          <td class="time-cell">${row.waktu}</td>
+          <td>${row.kapal}</td>
+          <td>${row.rute}</td>
+          <td>${row.kapasitas}</td>
+          <td>${row.tersedia}</td>
+          <td><span class="badge badge-${row.status === 'Berangkat' ? 'berangkat' : 'terjadwal'}">${row.status}</span></td>
+          <td><button class="btn-edit" onclick="openEdit(${row.id})">✏️ Edit</button></td>
+          <td><button class="btn-hapus" onclick="openConfirm(${row.id})">🗑 Hapus</button></td>
+        </tr>
+      `).join('');
+    }
+
+    function openModal(id = null) {
+      editId = id;
+      document.getElementById('modalTitle').textContent = id ? 'Edit Jadwal' : 'Tambah Jadwal';
+      if (id) {
+        const row = data.find(d => d.id === id);
+        document.getElementById('fWaktu').value     = row.waktu;
+        document.getElementById('fKapal').value     = row.kapal;
+        document.getElementById('fRute').value      = row.rute;
+        document.getElementById('fKapasitas').value = row.kapasitas;
+        document.getElementById('fTersedia').value  = row.tersedia;
+        document.getElementById('fStatus').value    = row.status;
+      } else {
+        document.getElementById('fWaktu').value     = '';
+        document.getElementById('fKapal').value     = '';
+        document.getElementById('fRute').value      = '';
+        document.getElementById('fKapasitas').value = '';
+        document.getElementById('fTersedia').value  = '';
+        document.getElementById('fStatus').value    = 'Terjadwal';
+      }
+      document.getElementById('modalBackdrop').classList.add('show');
+    }
+
+    function openEdit(id) { openModal(id); }
+    function closeModal() { document.getElementById('modalBackdrop').classList.remove('show'); }
+
+    function saveData() {
+      const waktu     = document.getElementById('fWaktu').value;
+      const kapal     = document.getElementById('fKapal').value.trim();
+      const rute      = document.getElementById('fRute').value.trim();
+      const kapasitas = parseInt(document.getElementById('fKapasitas').value);
+      const tersedia  = parseInt(document.getElementById('fTersedia').value);
+      const status    = document.getElementById('fStatus').value;
+
+      if (!waktu || !kapal || !rute || isNaN(kapasitas) || isNaN(tersedia)) {
+        alert('Harap isi semua field dengan benar.');
+        return;
+      }
+
+      if (editId) {
+        const idx = data.findIndex(d => d.id === editId);
+        data[idx] = { id: editId, waktu, kapal, rute, kapasitas, tersedia, status };
+      } else {
+        data.push({ id: nextId++, waktu, kapal, rute, kapasitas, tersedia, status });
+      }
+
+      closeModal();
+      render();
+    }
+
+    function openConfirm(id) {
+      hapusId = id;
+      document.getElementById('confirmBackdrop').classList.add('show');
+    }
+
+    function closeConfirm() {
+      document.getElementById('confirmBackdrop').classList.remove('show');
+      hapusId = null;
+    }
+
+    function confirmHapus() {
+      data = data.filter(d => d.id !== hapusId);
+      closeConfirm();
+      render();
+    }
+
+    render();
+  </script>
+
+</body>
+</html>
