@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jadwal Kapal - SmartPort</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <img src="https://via.placeholder.com/60" alt="SmartPort Logo">
+                <h3>SMARTPORT</h3>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/dashboard" class="nav-item">
+                    <span>📊</span> Dashboard
+                </a>
+                <a href="/jadwal-kapal" class="nav-item active">
+                    <span>🚢</span> Jadwal Kapal
+                </a>
+                <a href="/pesan-tiket" class="nav-item">
+                    <span>🎫</span> Pesan Tiket
+                </a>
+                <a href="/tiket-saya" class="nav-item">
+                    <span>🎫</span> Tiket Saya
+                </a>
+                <a href="/riwayat" class="nav-item">
+                    <span>📋</span> Riwayat
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header dengan Profile Menu -->
+            <header class="topbar">
+                <div>
+                    <h1>Selamat Datang, <span id="userName">User</span>!</h1>
+                    <p class="text-muted">Monitoring Arus Kendaraan Secara Real-Time</p>
+                </div>
+                
+                <!-- Profile Dropdown Menu -->
+                <div class="user-menu">
+                    <div class="profile-dropdown" onclick="toggleProfileMenu(event)">
+                        <div class="profile-trigger">
+                            <div class="profile-avatar">
+                                <span id="userInitial">U</span>
+                            </div>
+                            <span class="profile-name" id="profileName">User</span>
+                            <span class="dropdown-arrow">▼</span>
+                        </div>
+                        <div class="profile-menu" id="profileMenu">
+                            <div class="profile-header">
+                                <div class="profile-avatar-large">
+                                    <span id="userInitialLarge">U</span>
+                                </div>
+                                <div>
+                                    <div class="profile-fullname" id="profileFullName">User Name</div>
+                                    <div class="profile-email" id="profileEmail">user@email.com</div>
+                                </div>
+                            </div>
+                            <div class="profile-divider"></div>
+                            <a href="/profil" class="profile-menu-item">
+                                <span>👤</span> Profil Saya
+                            </a>
+                            <a href="/pengaturan" class="profile-menu-item">
+                                <span>⚙️</span> Pengaturan
+                            </a>
+                            <div class="profile-divider"></div>
+                            <a href="#" class="profile-menu-item logout" onclick="logout()">
+                                <span>🚪</span> Logout
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Search Form -->
+            <div class="search-card">
+                <div class="search-form">
+                    <div class="form-group">
+                        <label for="rute">Rute</label>
+                        <input type="text" id="rute" placeholder="Contoh: Pungggur - Tj. Uban">
+                    </div>
+                    <div class="form-group">
+                        <label for="tanggal">Tanggal Keberangkatan</label>
+                        <input type="date" id="tanggal">
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn-search" onclick="cariJadwal()">
+                            <span>🔍</span> Cari Jadwal
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Table Jadwal -->
+            <div class="table-card">
+                <div class="table-header">
+                    <h3>Jadwal Keberangkatan Kapal</h3>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>No</th>
+                                <th>Nama Kapal</th>
+                                <th>Rute</th>
+                                <th>Jam Keberangkatan</th>
+                                <th>Status</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="jadwalTableBody">
+                            <!-- Data akan di-load dari JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // ===== PROFILE DROPDOWN FUNCTIONS =====
+        function toggleProfileMenu(e) {
+            e.stopPropagation();
+            const dropdown = document.querySelector('.profile-dropdown');
+            dropdown.classList.toggle('active');
+        }
+
+        document.addEventListener('click', (e) => {
+            const dropdown = document.querySelector('.profile-dropdown');
+            if (dropdown && !dropdown.contains(e.target)) {
+                dropdown.classList.remove('active');
+            }
+        });
+
+        function logout() {
+            if (confirm('Apakah Anda yakin ingin logout?')) {
+                localStorage.removeItem('user');
+                window.location.href = '/login';
+            }
+        }
+
+        // ===== JADWAL KAPAL FUNCTIONS =====
+        
+        // Data dummy jadwal kapal
+        const jadwalData = [
+            {
+                no: 1,
+                namaKapal: 'Kapal Barunajaya',
+                rute: 'Pungggur - Tj. Uban',
+                jam: '09:30 WIB',
+                status: 'Tersedia'
+            },
+            {
+                no: 2,
+                namaKapal: 'KM. Bukit Raya',
+                rute: 'Pungggur - Tj. Uban',
+                jam: '11:00 WIB',
+                status: 'Tersedia'
+            },
+            {
+                no: 3,
+                namaKapal: 'KM. Bahari Nusantara',
+                rute: 'Pungggur - Tj. Uban',
+                jam: '13:30 WIB',
+                status: 'Penuh'
+            },
+            {
+                no: 4,
+                namaKapal: 'KM. Samudera Jaya',
+                rute: 'Pungggur - Tj. Uban',
+                jam: '15:00 WIB',
+                status: 'Tersedia'
+            },
+            {
+                no: 5,
+                namaKapal: 'KM. Dharma Kencana',
+                rute: 'Pungggur - Tj. Uban',
+                jam: '17:30 WIB',
+                status: 'Tersedia'
+            }
+        ];
+
+        // Load data user
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadUserData();
+            renderJadwal(jadwalData);
+        });
+
+        async function loadUserData() {
+            try {
+                const user = JSON.parse(localStorage.getItem('user') || '{}');
+                const nama = user.nama || 'User';
+                const email = user.email || 'user@email.com';
+                const initial = nama.charAt(0).toUpperCase();
+                
+                document.getElementById('userName').textContent = nama;
+                document.getElementById('userInitial').textContent = initial;
+                document.getElementById('userInitialLarge').textContent = initial;
+                document.getElementById('profileName').textContent = nama;
+                document.getElementById('profileFullName').textContent = nama;
+                document.getElementById('profileEmail').textContent = email;
+            } catch (err) {
+                console.error('Error load data:', err);
+            }
+        }
+
+        // Render tabel jadwal
+        function renderJadwal(data) {
+            const tbody = document.getElementById('jadwalTableBody');
+            
+            if (data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center">
+                            <p style="padding: 40px; color: #64748b;">
+                                Tidak ada jadwal yang tersedia untuk pencarian ini.
+                            </p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = data.map(item => `
+                <tr>
+                    <td>${item.no}</td>
+                    <td><strong>${item.namaKapal}</strong></td>
+                    <td>${item.rute}</td>
+                    <td>${item.jam}</td>
+                    <td>
+                        <span class="status-badge ${item.status.toLowerCase()}">
+                            ${item.status === 'Tersedia' ? '●' : '●'} ${item.status}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="btn-pesan" onclick="pesanTiket('${item.namaKapal}', '${item.jam}')">
+                            Pesan Tiket
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Cari jadwal
+        function cariJadwal() {
+            const ruteInput = document.getElementById('rute').value.toLowerCase();
+            const tanggal = document.getElementById('tanggal').value;
+            
+            // Filter data berdasarkan rute
+            const filtered = jadwalData.filter(item => {
+                const matchRute = !ruteInput || item.rute.toLowerCase().includes(ruteInput);
+                return matchRute;
+            });
+            
+            renderJadwal(filtered);
+        }
+
+        // Pesan tiket
+        function pesanTiket(namaKapal, jam) {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            
+            if (!user.email) {
+                alert('Silakan login terlebih dahulu untuk memesan tiket!');
+                window.location.href = '/login';
+                return;
+            }
+            
+            if (confirm(` Konfirmasi Pemesanan\n\nKapal: ${namaKapal}\nJam: ${jam}\n\nLanjutkan ke halaman pemesanan?`)) {
+                // Simpan data ke localStorage
+                localStorage.setItem('selectedJadwal', JSON.stringify({
+                    namaKapal,
+                    jam,
+                    tanggal: document.getElementById('tanggal').value
+                }));
+                
+                // Redirect ke halaman pesan tiket
+                window.location.href = '/pesan-tiket';
+            }
+        }
+
+        // Set default date to today
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('tanggal').value = today;
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Riwayat Tiket - SmartPort</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        /* CSS KHUSUS HALAMAN RIWAYAT */
+        .history-container { max-width: 900px; margin: 0 auto; }
+        
+        .filter-bar {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 24px; background: white; padding: 16px;
+            border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .filter-tabs { display: flex; gap: 12px; }
+        .filter-tab {
+            padding: 8px 16px; border-radius: 20px; cursor: pointer;
+            font-weight: 600; font-size: 14px; color: #64748b; transition: all 0.2s;
+        }
+        .filter-tab.active { background: #0284c7; color: white; }
+        
+        .ticket-list { display: flex; flex-direction: column; gap: 16px; }
+        
+        .history-card {
+            background: white; border-radius: 12px; padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05); display: flex;
+            justify-content: space-between; align-items: center;
+            border-left: 5px solid #cbd5e1; transition: transform 0.2s;
+        }
+        .history-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        
+        /* Status Colors */
+        .history-card.status-upcoming { border-left-color: #22c55e; } /* Hijau: Akan Datang */
+        .history-card.status-used { border-left-color: #94a3b8; } /* Abu: Selesai */
+        .history-card.status-cancelled { border-left-color: #ef4444; } /* Merah: Batal */
+
+        .card-info h4 { margin: 0 0 4px 0; color: #0f172a; font-size: 16px; }
+        .card-info p { margin: 0; color: #64748b; font-size: 14px; }
+        .card-date { font-weight: 700; color: #0284c7; margin-top: 8px; display: block; }
+        
+        .card-status {
+            padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase;
+        }
+        .bg-green { background: #dcfce7; color: #166534; }
+        .bg-gray { background: #f1f5f9; color: #475569; }
+        .bg-red { background: #fee2e2; color: #991b1b; }
+
+        .empty-state {
+            text-align: center; padding: 60px 20px; color: #64748b;
+            background: white; border-radius: 12px; border: 2px dashed #e2e8f0;
+        }
+        .empty-icon { font-size: 48px; margin-bottom: 16px; display: block; opacity: 0.5; }
+
+        @media (max-width: 768px) {
+            .history-card { flex-direction: column; align-items: flex-start; gap: 16px; }
+            .card-status { width: 100%; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-logo"><img src="https://via.placeholder.com/60" alt="Logo"><h3>SMARTPORT</h3></div>
+            <nav class="sidebar-nav">
+                <a href="/dashboard" class="nav-item"><span>📊</span> Dashboard</a>
+                <a href="/jadwal-kapal" class="nav-item"><span>🚢</span> Jadwal Kapal</a>
+                <a href="/pesan-tiket" class="nav-item"><span>🎫</span> Pesan Tiket</a>
+                <a href="/tiket-saya" class="nav-item"><span>🎫</span> Tiket Saya</a>
+                <a href="/riwayat" class="nav-item active"><span>📋</span> Riwayat</a>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <div><h1>Riwayat Perjalanan</h1><p class="text-muted">Daftar tiket yang pernah Anda beli</p></div>
+                <div class="user-menu">
+                    <div class="profile-dropdown" onclick="toggleProfileMenu(event)">
+                        <div class="profile-trigger"><div class="profile-avatar"><span id="userInitial">U</span></div><span class="profile-name" id="profileName">User</span><span class="dropdown-arrow">▼</span></div>
+                        <div class="profile-menu" id="profileMenu">
+                            <div class="profile-header"><div class="profile-avatar-large"><span id="userInitialLarge">U</span></div><div><div class="profile-fullname" id="profileFullName">User Name</div><div class="profile-email" id="profileEmail">user@email.com</div></div></div>
+                            <div class="profile-divider"></div>
+                            <a href="#" class="profile-menu-item logout" onclick="logout()">🚪 Logout</a>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <div class="history-container">
+                <!-- Filter Tabs -->
+                <div class="filter-bar">
+                    <div class="filter-tabs">
+                        <div class="filter-tab active" onclick="filterHistory('all')">Semua</div>
+                        <div class="filter-tab" onclick="filterHistory('upcoming')">Akan Datang</div>
+                        <div class="filter-tab" onclick="filterHistory('used')">Selesai</div>
+                    </div>
+                </div>
+
+                <!-- List Tiket -->
+                <div id="historyList" class="ticket-list">
+                    <!-- Data akan di-render via JavaScript -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Profile Logic
+        function toggleProfileMenu(e) { e.stopPropagation(); document.querySelector('.profile-dropdown').classList.toggle('active'); }
+        document.addEventListener('click', (e) => { if(!document.querySelector('.profile-dropdown').contains(e.target)) document.querySelector('.profile-dropdown').classList.remove('active'); });
+        function logout() { if(confirm('Logout?')) { localStorage.removeItem('user'); window.location.href='/login'; } }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load User Info
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            document.getElementById('profileName').textContent = user.nama || 'User';
+            document.getElementById('profileFullName').textContent = user.nama || 'User';
+            document.getElementById('userInitial').textContent = (user.nama || 'U').charAt(0).toUpperCase();
+            document.getElementById('userInitialLarge').textContent = (user.nama || 'U').charAt(0).toUpperCase();
+            document.getElementById('profileEmail').textContent = user.email || 'user@email.com';
+
+            renderHistory('all');
+        });
+
+        function renderHistory(filterType) {
+            const listContainer = document.getElementById('historyList');
+            listContainer.innerHTML = '';
+
+            // Ambil data dari LocalStorage (Simulasi Database)
+            let historyData = JSON.parse(localStorage.getItem('ticketHistory') || '[]');
+            
+            // Tambahkan data dummy jika kosong biar terlihat rapi saat demo
+            if (historyData.length === 0) {
+                historyData = [
+                    { id: 'TKT-DEMO-001', kapal: 'KM. Bukit Raya', rute: 'Pungggur - Tj. Uban', tanggal: '2024-05-10', jam: '09:30', status: 'used', bawaKendaraan: true, plat: 'B 1234 ABC' },
+                    { id: 'TKT-DEMO-002', kapal: 'Baruna Jaya', rute: 'Pungggur - Tj. Uban', tanggal: '2024-05-12', jam: '11:00', status: 'upcoming', bawaKendaraan: false, plat: '-' }
+                ];
+                localStorage.setItem('ticketHistory', JSON.stringify(historyData));
+            }
+
+            // Filter Data
+            if (filterType !== 'all') {
+                historyData = historyData.filter(item => item.status === filterType);
+            }
+
+            // Update Tab Active State
+            document.querySelectorAll('.filter-tab').forEach(tab => {
+                tab.classList.remove('active');
+                if (tab.textContent.toLowerCase().includes(filterType === 'upcoming' ? 'akan' : filterType === 'used' ? 'selesai' : 'semua')) {
+                    tab.classList.add('active');
+                }
+            });
+
+            if (historyData.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="empty-state">
+                        <span class="empty-icon">📭</span>
+                        <h3>Tidak ada riwayat</h3>
+                        <p>Anda belum memiliki tiket dengan status ini.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Render Cards
+            historyData.forEach(ticket => {
+                const isUpcoming = ticket.status === 'upcoming';
+                const statusClass = isUpcoming ? 'status-upcoming' : 'status-used';
+                const badgeClass = isUpcoming ? 'bg-green' : 'bg-gray';
+                const statusText = isUpcoming ? 'Akan Datang' : 'Selesai';
+                const vehicleInfo = ticket.bawaKendaraan ? `<br><small>🚗 ${ticket.plat}</small>` : '<br><small>🚶 Pejalan Kaki</small>';
+
+                const card = document.createElement('div');
+                card.className = `history-card ${statusClass}`;
+                card.innerHTML = `
+                    <div class="card-info">
+                        <h4>${ticket.kapal}</h4>
+                        <p>${ticket.rute}</p>
+                        <span class="card-date">📅 ${new Date(ticket.tanggal).toLocaleDateString('id-ID')} • ⏰ ${ticket.jam} WIB</span>
+                        ${vehicleInfo}
+                    </div>
+                    <div style="text-align: right;">
+                        <span class="card-status ${badgeClass}">${statusText}</span>
+                        <div style="margin-top: 8px; font-family: monospace; font-size: 12px; color: #94a3b8;">${ticket.id}</div>
+                        ${isUpcoming ? `<button onclick="viewTicket('${ticket.id}')" style="margin-top:8px; padding:6px 12px; background:#0284c7; color:white; border:none; border-radius:6px; cursor:pointer; font-size:12px;">Lihat Tiket</button>` : ''}
+                    </div>
+                `;
+                listContainer.appendChild(card);
+            });
+        }
+
+        function filterHistory(type) {
+            renderHistory(type);
+        }
+
+        function viewTicket(id) {
+            // Simulasi pindah ke halaman detail/tiket aktif
+            alert(`Membuka detail tiket ${id}... (Fitur ini akan mengarahkan ke halaman Tiket Saya)`);
+            // window.location.href = '/tiket-saya?id=' + id; 
+        }
+    </script>
+</body>
+</html>

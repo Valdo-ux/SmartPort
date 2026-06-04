@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Pengguna - SmartPort</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <img src="https://via.placeholder.com/60" alt="SmartPort Logo">
+                <h3>SMARTPORT</h3>
+            </div>
+            <nav class="sidebar-nav">
+    <a href="/dashboard" class="nav-item active">
+        <span>📊</span> Dashboard
+    </a>
+    <a href="/jadwal-kapal" class="nav-item">
+        <span>🚢</span> Jadwal Kapal
+    </a>
+    <a href="/pesan-tiket" class="nav-item">
+        <span>🎫</span> Pesan Tiket
+    </a>
+    <a href="/tiket-saya" class="nav-item">
+        <span>🎫</span> Tiket Saya
+    </a>
+    <a href="/riwayat" class="nav-item">
+        <span>📋</span> Riwayat
+    </a>
+</nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header dengan Profile Menu -->
+            <header class="topbar">
+                <div>
+                    <h1>Selamat Datang, <span id="userName">User</span>!</h1>
+                    <p class="text-muted">Monitoring Arus Kendaraan Secara Real-Time</p>
+                </div>
+                
+                <!-- Profile Dropdown Menu -->
+                <div class="user-menu">
+                    <div class="profile-dropdown" onclick="toggleProfileMenu(event)">
+                        <div class="profile-trigger">
+                            <div class="profile-avatar">
+                                <span id="userInitial">U</span>
+                            </div>
+                            <span class="profile-name" id="profileName">User</span>
+                            <span class="dropdown-arrow">▼</span>
+                        </div>
+                        <div class="profile-menu" id="profileMenu">
+                            <div class="profile-header">
+                                <div class="profile-avatar-large">
+                                    <span id="userInitialLarge">U</span>
+                                </div>
+                                <div>
+                                    <div class="profile-fullname" id="profileFullName">User Name</div>
+                                    <div class="profile-email" id="profileEmail">user@email.com</div>
+                                </div>
+                            </div>
+                            <div class="profile-divider"></div>
+                            <a href="#" class="profile-menu-item">
+                                <span>👤</span> Profil Saya
+                            </a>
+                            <a href="#" class="profile-menu-item">
+                                <span>⚙️</span> Pengaturan
+                            </a>
+                            <div class="profile-divider"></div>
+                            <a href="#" class="profile-menu-item logout" onclick="logout()">
+                                <span>🚪</span> Logout
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Content Grid -->
+            <div class="dashboard-grid">
+                <!-- Carousel/Banner -->
+                <div class="card banner-card">
+                    <div class="carousel">
+                        <button class="carousel-btn prev" onclick="changeBanner(-1)">❮</button>
+                        <div class="carousel-content">
+                            <img src="https://via.placeholder.com/600x300/0284c7/ffffff?text=Selamat+Datang+di+SmartPort" alt="Banner" id="bannerImage">
+                        </div>
+                        <button class="carousel-btn next" onclick="changeBanner(1)">❯</button>
+                    </div>
+                </div>
+
+                <!-- Status Antrian -->
+                <div class="card antrian-card">
+                    <h3>Status Antrian</h3>
+                    <div class="antrian-code" id="antrianCode">B-045</div>
+                    <p class="text-muted" style="margin-bottom: 16px;">Estimasi: 15-30 menit</p>
+                    <button class="btn-detail" onclick="cekDetailTiket()">Cek Detail Tiket</button>
+                </div>
+
+                <!-- Grafik Kepadatan -->
+                <div class="card full-width">
+                    <h3>KEPADATAN KEBERANGKATAN KAPAL PER JAM (PUNGGUR SMARTPORT)</h3>
+                    <div class="chart-container">
+                        <canvas id="kepadatanChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // ===== PROFILE DROPDOWN FUNCTIONS =====
+        function toggleProfileMenu(e) {
+            e.stopPropagation();
+            const dropdown = document.querySelector('.profile-dropdown');
+            dropdown.classList.toggle('active');
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            const dropdown = document.querySelector('.profile-dropdown');
+            if (dropdown && !dropdown.contains(e.target)) {
+                dropdown.classList.remove('active');
+            }
+        });
+
+        // Logout function
+        function logout() {
+            if (confirm('Apakah Anda yakin ingin logout?')) {
+                localStorage.removeItem('user');
+                window.location.href = '/login';
+            }
+        }
+
+        // Simple banner carousel
+        const banners = [
+            'https://via.placeholder.com/600x300/0284c7/ffffff?text=Selamat+Datang+di+SmartPort',
+            'https://via.placeholder.com/600x300/22c55e/ffffff?text=Jadwal+Kapal+Tersedia',
+            'https://via.placeholder.com/600x300/f59e0b/ffffff?text=Pesan+Tiket+Mudah'
+        ];
+        let currentBanner = 0;
+
+        function changeBanner(direction) {
+            currentBanner = (currentBanner + direction + banners.length) % banners.length;
+            document.getElementById('bannerImage').src = banners[currentBanner];
+        }
+
+        // Cek detail tiket
+        function cekDetailTiket() {
+            const kode = document.getElementById('antrianCode').textContent;
+            alert(`🎫 Detail Tiket\n\nKode Antrian: ${kode}\nStatus: Menunggu\nEstimasi: 15-30 menit\n\nSilakan tunggu panggilan.`);
+        }
+    </script>
+    
+    <script src="/js/dashboard-pengguna.js"></script>
+</body>
+</html>
