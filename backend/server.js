@@ -206,32 +206,6 @@ app.delete('/api/jadwal/:id', async (req, res) => {
     }
 });
 
-// ==================== 🎫 API - TICKET ====================
-app.get('/api/pemesanan', async (req, res) => {
-    try {
-        const [pemesanan] = await db.promise().query(`
-            SELECT 
-                t.id_ticket,
-                u.username as nama,
-                u.email,
-                s.ship_name as kapal,
-                s.route as tujuan,
-                TIME_FORMAT(s.departure_time, '%H:%i') as waktu,
-                s.price as harga,
-                t.ticket_status as status,
-                t.vehicle_number,
-                t.created_at
-            FROM TICKET t
-            LEFT JOIN USERS u ON t.user_id = u.user_id
-            LEFT JOIN SCHEDULE s ON t.schedule_id = s.schedule_id
-            ORDER BY t.created_at DESC
-        `);
-        res.json({ success: true, data: pemesanan });
-    } catch (err) {
-        console.error('❌ Ticket Error:', err);
-        res.status(500).json({ success: false, message: 'Gagal ambil data pemesanan' });
-    }
-});
 
 // ==================== 👤 API - USER DATA ====================
 app.get('/api/dashboard-data', async (req, res) => {

@@ -33,7 +33,7 @@ export default function LoginPage() {
           router.push('/admin/dashboard')
         } else {
           // User biasa → redirect ke homepage (nanti ke dashboard user)
-          router.push('/')
+          router.push('/user/jadwal')
         }
       }
     } catch (err) {
