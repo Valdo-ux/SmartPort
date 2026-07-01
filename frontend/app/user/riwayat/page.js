@@ -43,9 +43,14 @@ export default function RiwayatTiketPage() {
 
   const formatTanggal = (dateStr) => {
     if (!dateStr) return '-'
+  // Ambil bagian tanggal saja (potong jika ada waktu 'T...')
     const cleanDate = dateStr.split('T')[0]
     const parts = cleanDate.split('-')
-    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`
+  
+  // Susun manual: YYYY-MM-DD -> DD/MM/YYYY
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`
+    }
     return cleanDate
   }
 

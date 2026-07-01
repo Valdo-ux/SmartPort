@@ -36,16 +36,37 @@ export default function HomePage() {
     try {
       const res = await axios.get(`${API_URL}/jadwal`)
       if (res.data.success) {
-        const formattedData = res.data.data.map((item) => ({
-          id: item.schedule_id,
-          tanggal: item.departure_date,
-          waktu: item.departure_time ? item.departure_time.substring(0, 5) : '00:00',
-          kapal: item.ship_name || '-',
-          rute: item.route || '-',
-          harga: Number(item.price) || 0,
-          tersedia: Number(item.remaining_slot) || 0,
-          status: item.departure_status || 'Terjadwal'
-        }))
+        const formattedData = res.data.data.map((item) => {
+          // Format tanggal pakai split string (ANTI TIMEZONE)
+          let rawDate = item.departure_date
+          if (rawDate instanceof Date) {
+            const yyyy = rawDate.getFullYear()
+            const mm = String(rawDate.getMonth() + 1).padStart(2, '0')
+            const dd = String(rawDate.getDate()).padStart(2, '0')
+            rawDate = `${yyyy}-${mm}-${dd}`
+          } else if (typeof rawDate === 'string') {
+            rawDate = rawDate.split('T')[0]
+          }
+
+          let displayDate = '-'
+          if (rawDate) {
+            const parts = rawDate.split('-')
+            if (parts.length === 3) {
+              displayDate = `${parts[2]}/${parts[1]}/${parts[0]}`
+            }
+          }
+
+          return {
+            id: item.schedule_id,
+            tanggal: displayDate,
+            waktu: item.departure_time ? item.departure_time.substring(0, 5) : '00:00',
+            kapal: item.ship_name || '-',
+            rute: item.route || '-',
+            harga: Number(item.price) || 0,
+            tersedia: Number(item.remaining_slot) || 0,
+            status: item.departure_status || 'Terjadwal'
+          }
+        })
         setTodaySchedule(formattedData)
       }
     } catch (error) {
@@ -69,16 +90,37 @@ export default function HomePage() {
       
       const res = await axios.get(`${API_URL}/jadwal?${params.toString()}`)
       if (res.data.success) {
-        const formattedData = res.data.data.map((item) => ({
-          id: item.schedule_id,
-          tanggal: item.departure_date,
-          waktu: item.departure_time ? item.departure_time.substring(0, 5) : '00:00',
-          kapal: item.ship_name || '-',
-          rute: item.route || '-',
-          harga: Number(item.price) || 0,
-          tersedia: Number(item.remaining_slot) || 0,
-          status: item.departure_status || 'Terjadwal'
-        }))
+        const formattedData = res.data.data.map((item) => {
+          // Format tanggal pakai split string (ANTI TIMEZONE)
+          let rawDate = item.departure_date
+          if (rawDate instanceof Date) {
+            const yyyy = rawDate.getFullYear()
+            const mm = String(rawDate.getMonth() + 1).padStart(2, '0')
+            const dd = String(rawDate.getDate()).padStart(2, '0')
+            rawDate = `${yyyy}-${mm}-${dd}`
+          } else if (typeof rawDate === 'string') {
+            rawDate = rawDate.split('T')[0]
+          }
+
+          let displayDate = '-'
+          if (rawDate) {
+            const parts = rawDate.split('-')
+            if (parts.length === 3) {
+              displayDate = `${parts[2]}/${parts[1]}/${parts[0]}`
+            }
+          }
+
+          return {
+            id: item.schedule_id,
+            tanggal: displayDate,
+            waktu: item.departure_time ? item.departure_time.substring(0, 5) : '00:00',
+            kapal: item.ship_name || '-',
+            rute: item.route || '-',
+            harga: Number(item.price) || 0,
+            tersedia: Number(item.remaining_slot) || 0,
+            status: item.departure_status || 'Terjadwal'
+          }
+        })
         
         setSearchResults(formattedData)
         
@@ -101,7 +143,6 @@ export default function HomePage() {
     setSearchRoute('')
     setSearchDate('')
     setSearchResults(null)
-    // Scroll back to top smoothly
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -109,24 +150,11 @@ export default function HomePage() {
     router.push('/login')
   }
 
-
   const handleLogout = () => {
     localStorage.removeItem('user')
     setIsLoggedIn(false)
     setUserName('')
     window.location.reload()
-  }
-
-  // Fungsi Format Tanggal (Sangat aman untuk format MySQL YYYY-MM-DD)
-  const formatTanggal = (dateStr) => {
-    if (!dateStr) return '-'
-    // Ambil bagian tanggal saja (jika ada waktu T...)
-    const cleanDate = dateStr.split('T')[0]
-    const parts = cleanDate.split('-')
-    if (parts.length === 3) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}` // DD/MM/YYYY
-    }
-    return cleanDate
   }
 
   // Fungsi Format Harga
@@ -143,74 +171,74 @@ export default function HomePage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-{/* NAVBAR */}
-<nav style={{
-  background: '#fff',
-  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-  padding: '16px 0',
-  position: 'sticky',
-  top: 0,
-  zIndex: 100
-}}>
-  <div style={{
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: '0 24px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  }}>
-    <div>
-      <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#0284c7', margin: 0 }}>
-        Pelabuhan Pintar
-      </h1>
-      <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>
-        Pelabuhan Telaga Punggur
-      </p>
-    </div>
+      {/* NAVBAR */}
+      <nav style={{
+        background: '#fff',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        padding: '16px 0',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100
+      }}>
+        <div style={{
+          maxWidth: '1200px',
+          margin: '0 auto',
+          padding: '0 24px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div>
+            <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#0284c7', margin: 0 }}>
+              Pelabuhan Pintar
+            </h1>
+            <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>
+              Pelabuhan Telaga Punggur
+            </p>
+          </div>
 
-    <div style={{ display: 'flex', gap: '12px' }}>
-      {isLoggedIn ? (
-        <>
-          <span style={{ padding: '10px 16px', color: '#0284c7', fontWeight: '600' }}>
-            Halo, {userName}!
-          </span>
-          <button 
-            onClick={handleLogout}
-            style={{
-              padding: '10px 20px',
-              background: '#fff',
-              color: '#dc2626',
-              border: '2px solid #dc2626',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: '600',
-              cursor: 'pointer'
-            }}
-          >
-            Logout
-          </button>
-        </>
-      ) : (
-        <button 
-          onClick={handleLogin}
-          style={{
-            padding: '10px 24px',
-            background: '#0284c7',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '8px',
-            fontSize: '14px',
-            fontWeight: '600',
-            cursor: 'pointer'
-          }}
-        >
-          Log in
-        </button>
-      )}
-    </div>
-  </div>
-</nav>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            {isLoggedIn ? (
+              <>
+                <span style={{ padding: '10px 16px', color: '#0284c7', fontWeight: '600' }}>
+                  Halo, {userName}!
+                </span>
+                <button 
+                  onClick={handleLogout}
+                  style={{
+                    padding: '10px 20px',
+                    background: '#fff',
+                    color: '#dc2626',
+                    border: '2px solid #dc2626',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <button 
+                onClick={handleLogin}
+                style={{
+                  padding: '10px 24px',
+                  background: '#0284c7',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                Log in
+              </button>
+            )}
+          </div>
+        </div>
+      </nav>
 
       {/* HERO SECTION */}
       <section style={{
@@ -338,7 +366,7 @@ export default function HomePage() {
                           style={{ borderBottom: '1px solid #e2e8f0', transition: 'background 0.2s' }}
                         >
                           <td style={{ padding: '16px 20px', color: '#334155', fontWeight: '600' }}>
-                            {formatTanggal(jadwal.tanggal)}
+                            {jadwal.tanggal}
                           </td>
                           <td style={{ padding: '16px 20px', fontWeight: '700', color: '#0c4a6e' }}>
                             {jadwal.waktu}

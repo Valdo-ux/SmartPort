@@ -23,16 +23,37 @@ export default function UserJadwalPage() {
       
       const res = await axios.get(`${API_URL}/jadwal?${params.toString()}`)
       if (res.data.success) {
-        const formattedData = res.data.data.map((item) => ({
-          id: item.schedule_id,
-          tanggal: item.departure_date,
-          waktu: item.departure_time?.substring(0, 5) || '00:00',
-          kapal: item.ship_name || '-',
-          rute: item.route || '-',
-          harga: Number(item.price) || 0,
-          tersedia: Number(item.remaining_slot) || 0,
-          status: item.departure_status || 'Terjadwal'
-        }))
+        const formattedData = res.data.data.map((item) => {
+          // Format tanggal pakai split string (ANTI TIMEZONE)
+          let rawDate = item.departure_date
+          if (rawDate instanceof Date) {
+            const yyyy = rawDate.getFullYear()
+            const mm = String(rawDate.getMonth() + 1).padStart(2, '0')
+            const dd = String(rawDate.getDate()).padStart(2, '0')
+            rawDate = `${yyyy}-${mm}-${dd}`
+          } else if (typeof rawDate === 'string') {
+            rawDate = rawDate.split('T')[0]
+          }
+
+          let displayDate = '-'
+          if (rawDate) {
+            const parts = rawDate.split('-')
+            if (parts.length === 3) {
+              displayDate = `${parts[2]}/${parts[1]}/${parts[0]}`
+            }
+          }
+
+          return {
+            id: item.schedule_id,
+            tanggal: displayDate,
+            waktu: item.departure_time?.substring(0, 5) || '00:00',
+            kapal: item.ship_name || '-',
+            rute: item.route || '-',
+            harga: Number(item.price) || 0,
+            tersedia: Number(item.remaining_slot) || 0,
+            status: item.departure_status || 'Terjadwal'
+          }
+        })
         setJadwalList(formattedData)
       }
     } catch (error) {
@@ -50,16 +71,6 @@ export default function UserJadwalPage() {
     setSearchRoute('')
     setSearchDate('')
     fetchJadwal()
-  }
-
-  const formatTanggal = (dateStr) => {
-    if (!dateStr) return '-'
-    const cleanDate = dateStr.split('T')[0]
-    const parts = cleanDate.split('-')
-    if (parts.length === 3) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}`
-    }
-    return cleanDate
   }
 
   const formatHarga = (harga) => {
@@ -225,7 +236,7 @@ export default function UserJadwalPage() {
                     style={{ borderBottom: '1px solid #e2e8f0' }}
                   >
                     <td style={{ padding: '14px 18px', color: '#334155', fontWeight: '600' }}>
-                      {formatTanggal(jadwal.tanggal)}
+                      {jadwal.tanggal}
                     </td>
                     <td style={{ padding: '14px 18px', fontWeight: '700', color: '#0c4a6e' }}>
                       {jadwal.waktu}

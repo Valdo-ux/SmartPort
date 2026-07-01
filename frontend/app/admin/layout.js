@@ -67,6 +67,18 @@ export default function AdminLayout({ children }) {
           <span>Pemesanan</span>
         </Link>
 
+        <Link 
+          href="/admin/scanner" 
+          className={`nav-item ${pathname === '/admin/scanner' ? 'active' : ''}`}
+        >
+          <svg className="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <path d="M4 4h12v12H4z"/>
+            <circle cx="10" cy="10" r="3"/>
+            <path d="M4 8h2M14 8h2M4 12h2M14 12h2"/>
+          </svg>
+          <span>Gate Scanner</span>
+        </Link>
+
         {/* LOGOUT BUTTON */}
         <div 
           className="nav-item logout-item" 

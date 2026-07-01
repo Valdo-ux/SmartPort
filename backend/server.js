@@ -7,6 +7,9 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Set timezone ke Jakarta
+process.env.TZ = 'Asia/Jakarta';
+
 // Middleware
 app.use(cors({
     origin: 'http://localhost:3000',
@@ -20,7 +23,8 @@ const db = mysql.createConnection({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'smartport'
+    database: process.env.DB_NAME || 'smartport',
+    timezone: '+07:00' // Set timezone MySQL ke Jakarta
 });
 
 db.connect((err) => {
@@ -126,32 +130,62 @@ app.get('/api/admin/statistics', async (req, res) => {
 // ==================== 🚢 API - SCHEDULE ====================
 
 // 1. GET - Ambil semua jadwal (dengan filter rute & tanggal)
+// 1. GET - Ambil semua jadwal
 app.get('/api/jadwal', async (req, res) => {
     try {
-        const { rute, tanggal } = req.query;
+        const { rute, tanggal, showAll } = req.query;
         
-        let query = 'SELECT * FROM SCHEDULE WHERE 1=1';
+        let query = `
+            SELECT 
+                schedule_id,
+                ship_name,
+                departure_time,
+                DATE_FORMAT(departure_date, '%Y-%m-%d') as departure_date,
+                route,
+                price,
+                capacity,
+                remaining_slot,
+                departure_status,
+                created_at
+            FROM SCHEDULE 
+            WHERE 1=1
+        `;
         const params = [];
         
-        // Filter by rute
         if (rute) {
             query += ' AND route LIKE ?';
             params.push(`%${rute}%`);
         }
         
-        // Filter by tanggal
         if (tanggal) {
             query += ' AND departure_date = ?';
             params.push(tanggal);
-        } else {
-            // Jika tidak ada tanggal yang dipilih, tampilkan jadwal hari ini
-            query += ' AND departure_date = CURDATE()';
+        } else if (!showAll) {
+            query += ' AND departure_date >= CURDATE()';
         }
         
         query += ' ORDER BY departure_date ASC, departure_time ASC';
         
         const [jadwal] = await db.promise().query(query, params);
-        res.json({ success: true, data: jadwal });
+        
+        // Format tanggal di backend langsung jadi DD/MM/YYYY
+        const formattedJadwal = jadwal.map(item => {
+            let tanggalFormatted = '-'
+            if (item.departure_date) {
+                // departure_date sudah string YYYY-MM-DD dari DATE_FORMAT
+                const parts = item.departure_date.split('-')
+                if (parts.length === 3) {
+                    tanggalFormatted = `${parts[2]}/${parts[1]}/${parts[0]}`
+                }
+            }
+            
+            return {
+                ...item,
+                departure_date_formatted: tanggalFormatted
+            }
+        })
+        
+        res.json({ success: true, data: formattedJadwal });
     } catch (err) {
         console.error('❌ Jadwal GET Error:', err);
         res.status(500).json({ success: false, message: 'Gagal ambil data jadwal' });
@@ -206,7 +240,6 @@ app.delete('/api/jadwal/:id', async (req, res) => {
     }
 });
 
-
 // ==================== 👤 API - USER DATA ====================
 app.get('/api/dashboard-data', async (req, res) => {
     try {
@@ -229,7 +262,7 @@ app.get('/api/dashboard-data', async (req, res) => {
     }
 });
 
-// ==================== 🎫 API - TICKET ====================
+// ==================== 🎫 API - PEMESANAN (ADMIN) ====================
 app.get('/api/pemesanan', async (req, res) => {
     try {
         const { tanggal } = req.query;
@@ -354,7 +387,7 @@ app.get('/api/tickets/user/:userId', async (req, res) => {
                 s.ship_name,
                 s.route,
                 s.departure_time,
-                s.departure_date,
+                DATE_FORMAT(s.departure_date, '%Y-%m-%d') as departure_date,
                 s.price
             FROM TICKET t
             JOIN SCHEDULE s ON t.schedule_id = s.schedule_id
@@ -366,6 +399,84 @@ app.get('/api/tickets/user/:userId', async (req, res) => {
     } catch (err) {
         console.error('❌ Fetch Tickets Error:', err);
         res.status(500).json({ success: false, message: 'Gagal mengambil data tiket' });
+    }
+});
+
+// ==================== 🚦 API - GATE SCANNER (Simulasi IoT) ====================
+app.post('/api/gate/verify', async (req, res) => {
+    try {
+        const { plate_number } = req.body;
+        
+        if (!plate_number) {
+            return res.status(400).json({ success: false, message: 'Plat nomor tidak terbaca' });
+        }
+
+        // 1. Bersihkan teks dari OCR 
+        const cleanPlate = plate_number.replace(/[^A-Z0-9]/g, '').toUpperCase();
+
+        // 2. Cari tiket yang valid di database
+        const [tickets] = await db.promise().query(`
+            SELECT 
+                t.id_ticket, 
+                t.vehicle_number, 
+                s.departure_date, 
+                s.departure_time, 
+                s.ship_name, 
+                s.route 
+            FROM TICKET t
+            JOIN SCHEDULE s ON t.schedule_id = s.schedule_id
+            WHERE t.vehicle_number = ? AND t.ticket_status = 'Sukses'
+            ORDER BY s.departure_date ASC, s.departure_time ASC
+            LIMIT 1
+        `, [cleanPlate]);
+
+        // Jika plat nomor tidak punya tiket
+        if (tickets.length === 0) {
+            return res.json({ 
+                success: true, 
+                allowed: false, 
+                message: 'Tiket tidak ditemukan! Silakan beli tiket terlebih dahulu.' 
+            });
+        }
+
+        const ticket = tickets[0];
+        
+        // 3. Logika Aturan 2 Jam
+        const departureStr = `${ticket.departure_date}T${ticket.departure_time}`;
+        const departureTime = new Date(departureStr);
+        const now = new Date();
+        
+        const diffMs = departureTime - now; 
+        const diffHours = diffMs / (1000 * 60 * 60); 
+
+        let allowed = false;
+        let message = '';
+
+        if (diffHours < 0) {
+            message = 'Kapal sudah berangkat! Tiket hangus.';
+        } else if (diffHours > 2) {
+            message = `Terlalu awal! Waktu berangkat masih ${Math.floor(diffHours)} jam lagi. Silakan putar balik agar tidak menumpuk di parkiran.`;
+        } else {
+            allowed = true;
+            const diffMinutes = Math.floor(diffHours * 60);
+            message = `Tiket Valid! Silakan masuk ke area parkir. Kapal berangkat dalam ${diffMinutes} menit lagi.`;
+        }
+
+        res.json({
+            success: true,
+            allowed,
+            message,
+            ticket_info: {
+                plat: cleanPlate,
+                kapal: ticket.ship_name,
+                rute: ticket.route,
+                waktu_berangkat: departureTime.toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' })
+            }
+        });
+
+    } catch (err) {
+        console.error('❌ Gate Verify Error:', err);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });
     }
 });
 

@@ -29,19 +29,43 @@ export default function JadwalPage() {
 
   const fetchData = async () => {
     try {
-      const res = await axios.get(`${API_URL}/jadwal`)
+      // showAll=true agar admin bisa lihat semua jadwal
+      const res = await axios.get(`${API_URL}/jadwal?showAll=true`)
       if (res.data.success) {
-        const formattedData = res.data.data.map((item) => ({
-          id: item.schedule_id,
-          tanggal: item.departure_date, // Tambah tanggal
-          waktu: item.departure_time?.substring(0, 5),
-          kapal: item.ship_name,
-          rute: item.route,
-          kapasitas: item.capacity,
-          tersedia: item.remaining_slot,
-          harga: item.price,
-          status: item.departure_status
-        }))
+        const formattedData = res.data.data.map((item) => {
+          // 1. Ambil raw date (YYYY-MM-DD) untuk input modal
+          let rawDate = item.departure_date
+          if (rawDate instanceof Date) {
+            const yyyy = rawDate.getFullYear()
+            const mm = String(rawDate.getMonth() + 1).padStart(2, '0')
+            const dd = String(rawDate.getDate()).padStart(2, '0')
+            rawDate = `${yyyy}-${mm}-${dd}`
+          } else if (typeof rawDate === 'string') {
+            rawDate = rawDate.split('T')[0]
+          }
+
+          // 2. Format untuk tampilan tabel (DD/MM/YYYY)
+          let displayDate = '-'
+          if (rawDate) {
+            const parts = rawDate.split('-')
+            if (parts.length === 3) {
+              displayDate = `${parts[2]}/${parts[1]}/${parts[0]}`
+            }
+          }
+
+          return {
+            id: item.schedule_id,
+            rawDate: rawDate,       // Untuk input type="date"
+            tanggal: displayDate,   // Untuk tampilan tabel
+            waktu: item.departure_time?.substring(0, 5),
+            kapal: item.ship_name,
+            rute: item.route,
+            kapasitas: item.capacity,
+            tersedia: item.remaining_slot,
+            harga: item.price,
+            status: item.departure_status
+          }
+        })
         setData(formattedData)
       }
     } catch (error) {
@@ -51,25 +75,14 @@ export default function JadwalPage() {
     }
   }
 
-  // Format tanggal untuk tampilan (DD/MM/YYYY)
-  const formatTanggal = (dateStr) => {
-    if (!dateStr) return '-'
-    const date = new Date(dateStr)
-    const dd = String(date.getDate()).padStart(2, '0')
-    const mm = String(date.getMonth() + 1).padStart(2, '0')
-    const yyyy = date.getFullYear()
-    return `${dd}/${mm}/${yyyy}`
-  }
-
   const openModal = (id = null) => {
     setEditId(id)
-    // Default tanggal hari ini
     const today = new Date().toISOString().split('T')[0]
     
     if (id) {
       const row = data.find(d => d.id === id)
       setFormData({
-        tanggal: row.tanggal || today,
+        tanggal: row.rawDate || today,
         waktu: row.waktu,
         kapal: row.kapal,
         rute: row.rute,
@@ -111,7 +124,7 @@ export default function JadwalPage() {
         await axios.put(`${API_URL}/jadwal/${editId}`, {
           ship_name: kapal,
           departure_time: waktu + ':00',
-          departure_date: tanggal,
+          departure_date: tanggal, // Sudah format YYYY-MM-DD dari input type="date"
           route: rute,
           price: parseInt(harga),
           capacity: parseInt(kapasitas),
@@ -168,8 +181,7 @@ export default function JadwalPage() {
   }
 
   const sortedData = [...data].sort((a, b) => {
-    // Sort by tanggal, then by waktu
-    if (a.tanggal !== b.tanggal) return a.tanggal.localeCompare(b.tanggal)
+    if (a.rawDate !== b.rawDate) return a.rawDate.localeCompare(b.rawDate)
     return a.waktu.localeCompare(b.waktu)
   })
 
@@ -183,12 +195,10 @@ export default function JadwalPage() {
 
   return (
     <>
-      {/* TOPBAR */}
       <header className="topbar">
         <h1 className="topbar-title">Jadwal Keberangkatan</h1>
       </header>
 
-      {/* CONTENT */}
       <main className="content">
         <button className="btn-tambah" onClick={() => openModal()}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -217,7 +227,7 @@ export default function JadwalPage() {
               <tbody>
                 {sortedData.map((row) => (
                   <tr key={row.id}>
-                    <td className="time-cell">{formatTanggal(row.tanggal)}</td>
+                    <td className="time-cell">{row.tanggal}</td>
                     <td className="time-cell">{row.waktu}</td>
                     <td>{row.kapal}</td>
                     <td>{row.rute}</td>
@@ -232,7 +242,7 @@ export default function JadwalPage() {
                     <td>
                       <div className="action-cell">
                         <button className="btn-edit" onClick={() => openModal(row.id)}>
-                          ✏️ Edit
+                          ️ Edit
                         </button>
                         <button className="btn-hapus" onClick={() => openConfirm(row.id)}>
                           🗑 Hapus
@@ -247,7 +257,6 @@ export default function JadwalPage() {
         </div>
       </main>
 
-      {/* MODAL TAMBAH / EDIT */}
       {modalOpen && (
         <div className="modal-backdrop show" onClick={closeModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -255,87 +264,35 @@ export default function JadwalPage() {
             <div className="form-grid">
               <div className="form-group">
                 <label className="form-label">Tanggal Berangkat</label>
-                <input 
-                  type="date" 
-                  className="form-input" 
-                  id="tanggal"
-                  value={formData.tanggal}
-                  onChange={handleInputChange}
-                />
+                <input type="date" className="form-input" id="tanggal" value={formData.tanggal} onChange={handleInputChange} />
               </div>
               <div className="form-group">
                 <label className="form-label">Waktu</label>
-                <input 
-                  type="time" 
-                  className="form-input" 
-                  id="waktu"
-                  value={formData.waktu}
-                  onChange={handleInputChange}
-                />
+                <input type="time" className="form-input" id="waktu" value={formData.waktu} onChange={handleInputChange} />
               </div>
               <div className="form-group">
                 <label className="form-label">Rute</label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  id="rute"
-                  placeholder="cth: Karimun"
-                  value={formData.rute}
-                  onChange={handleInputChange}
-                />
+                <input type="text" className="form-input" id="rute" placeholder="cth: Karimun" value={formData.rute} onChange={handleInputChange} />
               </div>
               <div className="form-group full">
                 <label className="form-label">Nama Kapal</label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  id="kapal"
-                  placeholder="cth: Kapal Jarjit Singh"
-                  value={formData.kapal}
-                  onChange={handleInputChange}
-                />
+                <input type="text" className="form-input" id="kapal" placeholder="cth: Kapal Jarjit Singh" value={formData.kapal} onChange={handleInputChange} />
               </div>
               <div className="form-group">
                 <label className="form-label">Kapasitas</label>
-                <input 
-                  type="number" 
-                  className="form-input" 
-                  id="kapasitas"
-                  placeholder="300"
-                  value={formData.kapasitas}
-                  onChange={handleInputChange}
-                />
+                <input type="number" className="form-input" id="kapasitas" placeholder="300" value={formData.kapasitas} onChange={handleInputChange} />
               </div>
               <div className="form-group">
                 <label className="form-label">Tersedia</label>
-                <input 
-                  type="number" 
-                  className="form-input" 
-                  id="tersedia"
-                  placeholder="40"
-                  value={formData.tersedia}
-                  onChange={handleInputChange}
-                />
+                <input type="number" className="form-input" id="tersedia" placeholder="40" value={formData.tersedia} onChange={handleInputChange} />
               </div>
               <div className="form-group full">
                 <label className="form-label">Harga Tiket</label>
-                <input 
-                  type="number" 
-                  className="form-input" 
-                  id="harga"
-                  placeholder="50000"
-                  value={formData.harga}
-                  onChange={handleInputChange}
-                />
+                <input type="number" className="form-input" id="harga" placeholder="50000" value={formData.harga} onChange={handleInputChange} />
               </div>
               <div className="form-group full">
                 <label className="form-label">Status</label>
-                <select 
-                  className="form-select" 
-                  id="status"
-                  value={formData.status}
-                  onChange={handleInputChange}
-                >
+                <select className="form-select" id="status" value={formData.status} onChange={handleInputChange}>
                   <option value="Terjadwal">Terjadwal</option>
                   <option value="Berangkat">Berangkat</option>
                 </select>
@@ -349,7 +306,6 @@ export default function JadwalPage() {
         </div>
       )}
 
-      {/* MODAL KONFIRMASI HAPUS */}
       {confirmOpen && (
         <div className="modal-backdrop show" onClick={closeConfirm}>
           <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
