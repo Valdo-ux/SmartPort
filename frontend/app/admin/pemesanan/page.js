@@ -105,26 +105,33 @@ export default function PemesananPage() {
             </svg>
             Cetak
           </button>
-          
-          <div className="date-filter">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round">
-              <rect x="3" y="4" width="18" height="18" rx="2"/>
-              <path d="M16 2v4M8 2v4M3 10h18"/>
-            </svg>
-            <input 
-              type="date" 
-              className="date-input"
-              value={tanggal}
-              onChange={handleFilterChange}
-            />
-            <button className="btn-filter" onClick={handleApplyFilter}>
-              Filter
-            </button>
-            {filterDate && (
-              <button className="btn-reset" onClick={handleResetFilter}>
-                Reset
+
+          {/* Date filter + hint format, biar nggak ketuker bulan/tanggal (native <input type="date">
+              ngikutin locale browser yang defaultnya MM/DD/YYYY, bukan DD/MM/YYYY) */}
+          <div className="date-filter" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round">
+                <rect x="3" y="4" width="18" height="18" rx="2"/>
+                <path d="M16 2v4M8 2v4M3 10h18"/>
+              </svg>
+              <input 
+                type="date" 
+                className="date-input"
+                value={tanggal}
+                onChange={handleFilterChange}
+              />
+              <button className="btn-filter" onClick={handleApplyFilter}>
+                Filter
               </button>
-            )}
+              {filterDate && (
+                <button className="btn-reset" onClick={handleResetFilter}>
+                  Reset
+                </button>
+              )}
+            </div>
+            <span style={{ fontSize: '11px', color: '#94a3b8', paddingLeft: '23px' }}>
+              Isi urutan: Bulan / Tanggal / Tahun
+            </span>
           </div>
           
           <div className="date-display">

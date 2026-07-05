@@ -8,6 +8,9 @@ export default function AdminDashboardPage() {
     totalPengguna: 0
   })
   const [loading, setLoading] = useState(true)
+  const [camOnline, setCamOnline] = useState(false)
+
+  const PI_STREAM_URL = 'http://192.168.1.11:8080/video_feed'
 
   useEffect(() => {
     fetchStats()
@@ -93,48 +96,38 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* KAMERA SECTION - DINONAKTIFKAN SEMENTARA */}
-        {/* 
-        NANTI KALAU RASPBERRY PI SUDAH SIAP, UNCOMMENT BAGIAN INI:
-        
+        {/* LIVE MONITOR - KAMERA RASPBERRY PI */}
         <div className="camera-section">
           <div className="camera-header">
             <h2 className="camera-title">📹 Live Monitor Pelabuhan</h2>
             <div className="camera-status">
-              <span className="status-indicator live"></span>
-              <span>LIVE</span>
+              <span className={`status-indicator ${camOnline ? 'live' : ''}`}></span>
+              <span>{camOnline ? 'LIVE' : 'OFFLINE'}</span>
             </div>
           </div>
-          
+
           <div className="camera-container">
-            <img 
-              src="http://raspberrypi-ip:8080/?action=stream" 
+            {/* Stream selalu dicoba dimuat; disembunyikan kalau gagal/offline */}
+            <img
+              key={PI_STREAM_URL}
+              src={PI_STREAM_URL}
               alt="Live Camera Feed"
               className="camera-feed"
+              style={{ display: camOnline ? 'block' : 'none' }}
+              onLoad={() => setCamOnline(true)}
+              onError={() => setCamOnline(false)}
             />
-          </div>
-        </div>
-        */}
 
-        {/* Placeholder sementara */}
-        <div className="camera-section">
-          <div className="camera-header">
-            <h2 className="camera-title">📹 Live Monitor Pelabuhan</h2>
-            <div className="camera-status">
-              <span className="status-indicator"></span>
-              <span>OFFLINE</span>
-            </div>
-          </div>
-          
-          <div className="camera-container">
-            <div className="camera-offline">
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
-                <path d="M23 7l-7 5 7 5V7z"/>
-                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-              </svg>
-              <p>Kamera sedang offline</p>
-              <p style={{ fontSize: '12px', color: '#94a3b8' }}>IoT device belum terkoneksi</p>
-            </div>
+            {!camOnline && (
+              <div className="camera-offline">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
+                  <path d="M23 7l-7 5 7 5V7z"/>
+                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                </svg>
+                <p>Kamera sedang offline</p>
+                <p style={{ fontSize: '12px', color: '#94a3b8' }}>IoT device belum terkoneksi</p>
+              </div>
+            )}
           </div>
         </div>
       </main>

@@ -1,15 +1,14 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
-import Tesseract from 'tesseract.js'
 import axios from 'axios'
 
 const API_URL = 'http://localhost:4000/api'
 
+// IP Raspberry Pi kamu (hasil `hostname -I` di Pi)
+const PI_STREAM_URL = 'http://smartport.local:5000'
+
 export default function GateScannerPage() {
-  const videoRef = useRef(null)
-  const canvasRef = useRef(null)
-  const containerRef = useRef(null)
-  const streamRef = useRef(null)
+  const imgRef = useRef(null)
 
   const [isCameraOn, setIsCameraOn] = useState(false)
   const [scanning, setScanning] = useState(false)
@@ -17,336 +16,110 @@ export default function GateScannerPage() {
   const [rawText, setRawText] = useState('')
   const [cameraError, setCameraError] = useState('')
   const [ocrProgress, setOcrProgress] = useState('')
-  const [previewSrc, setPreviewSrc] = useState(null)
 
-  // State untuk Bounding Box
-  const [isDrawing, setIsDrawing] = useState(false)
-  const [box, setBox] = useState(null)
-  const [tempBox, setTempBox] = useState(null)
+  // Kotak hasil deteksi YOLO, buat visual feedback di atas video
+  const [detectedBox, setDetectedBox] = useState(null)
+
+  // Trik biar <img> stream bisa di-"restart" (misal kalau mau reconnect)
+  const [streamKey, setStreamKey] = useState(Date.now())
 
   useEffect(() => {
     startCamera()
-    return () => stopCamera()
   }, [])
 
-  const startCamera = async () => {
-    try {
-      setCameraError('')
-      if (streamRef.current) stopCamera()
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        },
-        audio: false
-      })
-
-      streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        setIsCameraOn(true)
-      }
-    } catch (err) {
-      console.error('Gagal akses kamera:', err)
-      setCameraError('Gagal mengakses kamera: ' + err.message)
-      setIsCameraOn(false)
-    }
+  const startCamera = () => {
+    setCameraError('')
+    setStreamKey(Date.now())
+    setIsCameraOn(true)
   }
 
   const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop())
-      streamRef.current = null
-    }
-    if (videoRef.current) videoRef.current.srcObject = null
     setIsCameraOn(false)
-    setBox(null)
+    setDetectedBox(null)
   }
 
-  // --- LOGIKA BOUNDING BOX ---
-  const handleMouseDown = (e) => {
-    if (!isCameraOn) return
-    const rect = containerRef.current.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-    setIsDrawing(true)
-    setTempBox({ x1: x, y1: y, x2: x, y2: y })
+  const handleStreamError = () => {
+    setCameraError(
+      `Gagal konek ke stream Pi di ${PI_STREAM_URL}/video_feed. Pastikan stream.py sudah jalan di Pi dan IP-nya benar.`
+    )
+    setIsCameraOn(false)
   }
 
-  const handleMouseMove = (e) => {
-    if (!isDrawing) return
-    const rect = containerRef.current.getBoundingClientRect()
-    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width))
-    const y = Math.max(0, Math.min(e.clientY - rect.top, rect.height))
-    setTempBox(prev => ({ ...prev, x2: x, y2: y }))
+  const handleStreamLoad = () => {
+    setCameraError('')
   }
 
-  const handleMouseUp = () => {
-    if (!isDrawing) return
-    setIsDrawing(false)
-
-    const rect = containerRef.current.getBoundingClientRect()
-    const video = videoRef.current
-
-    const scaleX = video.videoWidth / rect.width
-    const scaleY = video.videoHeight / rect.height
-
-    const x1 = Math.min(tempBox.x1, tempBox.x2) * scaleX
-    const y1 = Math.min(tempBox.y1, tempBox.y2) * scaleY
-    const x2 = Math.max(tempBox.x1, tempBox.x2) * scaleX
-    const y2 = Math.max(tempBox.y1, tempBox.y2) * scaleY
-
-    if (Math.abs(x2 - x1) > 20 && Math.abs(y2 - y1) > 10) {
-      setBox({ x1, y1, x2, y2 })
-    }
-    setTempBox(null)
-  }
-
-  const clearBox = () => setBox(null)
-
-  // --- PREPROCESSING YANG DIPERBAIKI ---
-  const upscaleCanvas = (srcCanvas, scale = 3) => {
-    const dst = document.createElement('canvas')
-    dst.width = srcCanvas.width * scale
-    dst.height = srcCanvas.height * scale
-    const ctx = dst.getContext('2d')
-    ctx.imageSmoothingEnabled = false
-    ctx.drawImage(srcCanvas, 0, 0, dst.width, dst.height)
-    return dst
-  }
-
-  const toGrayscale = (imageData) => {
-    const data = imageData.data
-    for (let i = 0; i < data.length; i += 4) {
-      const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
-      data[i] = lum
-      data[i + 1] = lum
-      data[i + 2] = lum
-    }
-    return imageData
-  }
-
-  const adaptiveThreshold = (imageData) => {
-    const data = imageData.data
-    let totalBrightness = 0
-    const pixelCount = data.length / 4
-    for (let i = 0; i < data.length; i += 4) {
-      totalBrightness += data[i]
-    }
-    const avgBrightness = totalBrightness / pixelCount
-    const threshold = avgBrightness * 0.85
-
-    console.log(`Avg brightness: ${avgBrightness.toFixed(1)}, Threshold: ${threshold.toFixed(1)}`)
-
-    for (let i = 0; i < data.length; i += 4) {
-      const val = data[i] > threshold ? 255 : 0
-      data[i] = val
-      data[i + 1] = val
-      data[i + 2] = val
-    }
-    return imageData
-  }
-
-  const enhanceContrast = (imageData, factor = 1.5) => {
-    const data = imageData.data
-    for (let i = 0; i < data.length; i += 4) {
-      const val = Math.min(255, Math.max(0, (data[i] - 128) * factor + 128))
-      data[i] = val
-      data[i + 1] = val
-      data[i + 2] = val
-    }
-    return imageData
-  }
-
-  const preprocessImage = (canvas) => {
-    const ctx = canvas.getContext('2d')
-    let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-
-    imageData = toGrayscale(imageData)
-    imageData = enhanceContrast(imageData, 1.8)
-    imageData = adaptiveThreshold(imageData)
-
-    ctx.putImageData(imageData, 0, 0)
-    return canvas
-  }
-
-  // --- FUNGSI VALIDASI & CLEANING OCR ---
-  
-  /**
-   * Validasi format plat nomor Indonesia
-   * Format: 1-2 huruf + 1-4 angka + 1-3 huruf
-   * Contoh: B 1234 AB, BP 2112 BE, D 123 ABC
-   */
   const isValidIndonesianPlate = (plate) => {
     const pattern = /^[A-Z]{1,2}\d{1,4}[A-Z]{1,3}$/
     return pattern.test(plate)
   }
 
-  /**
-   * Membersihkan hasil OCR dari Tesseract
-   * - Hapus karakter berulang di akhir (common error)
-   * - Hapus karakter yang mencurigakan
-   */
-  const cleanOCRResult = (text) => {
-    // Hapus semua yang bukan huruf/angka, jadi uppercase
-    let cleaned = text.replace(/[^A-Z0-9]/g, '').trim().toUpperCase()
-    
-    console.log('Before cleaning:', cleaned)
-    
-    // 1. Hapus karakter berulang di akhir (common Tesseract error)
-    // Contoh: BP2112BEB → BP2112BE
-    while (cleaned.length > 4) {
-      const lastChar = cleaned[cleaned.length - 1]
-      const secondLastChar = cleaned[cleaned.length - 2]
-      
-      // Jika 2 karakter terakhir sama, hapus yang terakhir
-      if (lastChar === secondLastChar) {
-        cleaned = cleaned.slice(0, -1)
-        console.log('Removed duplicate:', cleaned)
-      } else {
-        break
-      }
-    }
-    
-    // 2. Hapus karakter yang tidak masuk akal di akhir
-    // Contoh: jika diakhiri dengan angka setelah huruf (BP2112BE5 → BP2112BE)
-    if (cleaned.length > 4) {
-      const lastChar = cleaned[cleaned.length - 1]
-      const secondLastChar = cleaned[cleaned.length - 2]
-      
-      // Jika huruf diikuti angka di akhir, hapus angka
-      if (/[A-Z]/.test(secondLastChar) && /\d/.test(lastChar)) {
-        cleaned = cleaned.slice(0, -1)
-        console.log('Removed trailing number:', cleaned)
-      }
-    }
-    
-    // 3. Validasi panjang - plat nomor Indonesia biasanya 5-9 karakter
-    if (cleaned.length < 5 || cleaned.length > 9) {
-      console.log('Warning: Unusual plate length:', cleaned.length)
-    }
-    
-    console.log('After cleaning:', cleaned)
-    return cleaned
-  }
-
-  // --- LOGIKA SCAN & OCR ---
+  // --- LOGIKA SCAN: sekarang cukup panggil /detect_plate di Pi (YOLO + OCR   ---
+  // --- jalan di Python/server, browser tinggal terima hasilnya).            ---
   const handleScan = async () => {
-    if (!videoRef.current || !canvasRef.current) {
-      alert('Kamera tidak aktif!')
-      return
-    }
-    if (!box) {
-      alert('Silakan buat kotak (drag mouse) di area plat nomor terlebih dahulu!')
+    if (!isCameraOn) {
+      alert('Stream kamera Pi belum aktif!')
       return
     }
 
     setScanning(true)
     setResult(null)
     setRawText('')
-    setOcrProgress('Mengambil frame kamera...')
-    setPreviewSrc(null)
+    setDetectedBox(null)
+    setOcrProgress('Mendeteksi plat via YOLO di Raspberry Pi...')
 
     try {
-      const video = videoRef.current
-      const canvas = canvasRef.current
-      const ctx = canvas.getContext('2d')
+      const { data } = await axios.get(`${PI_STREAM_URL}/detect_plate`, { timeout: 15000 })
 
-      // 1. Ambil frame penuh dari video
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      if (!data.success) {
+        setResult({ allowed: false, message: data.message || 'Gagal menghubungi kamera Pi.' })
+        return
+      }
 
-      // 2. Crop area bounding box
-      const cropWidth = box.x2 - box.x1
-      const cropHeight = box.y2 - box.y1
-      const cropCanvas = document.createElement('canvas')
-      cropCanvas.width = cropWidth
-      cropCanvas.height = cropHeight
-      const cropCtx = cropCanvas.getContext('2d')
-      cropCtx.drawImage(canvas, box.x1, box.y1, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
+      if (data.box) {
+        setDetectedBox({
+          x1: data.box.x1, y1: data.box.y1, x2: data.box.x2, y2: data.box.y2,
+          frameWidth: data.frame_width, frameHeight: data.frame_height,
+        })
+      }
 
-      // 3. Upscale 3x sebelum preprocessing
-      setOcrProgress('Upscaling gambar...')
-      const upscaledCanvas = upscaleCanvas(cropCanvas, 3)
+      const plate = data.plate
 
-      // 4. Preprocessing
-      setOcrProgress('Memproses gambar...')
-      preprocessImage(upscaledCanvas)
-
-      // 5. Simpan preview
-      setPreviewSrc(upscaledCanvas.toDataURL('image/png'))
-
-      // 6. Jalankan Tesseract OCR
-      setOcrProgress('Menjalankan OCR...')
-      const { data: { text, confidence } } = await Tesseract.recognize(
-        upscaledCanvas,
-        'eng',
-        {
-          logger: m => {
-            if (m.status === 'recognizing text') {
-              setOcrProgress(`OCR: ${Math.round(m.progress * 100)}%`)
-            }
-          },
-          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-          tessedit_pageseg_mode: '8',
-          tessedit_ocr_engine_mode: '1',
-        }
-      )
-
-      // 7. Bersihkan dan validasi hasil OCR
-      const rawOCRText = text
-      const cleanedPlate = cleanOCRResult(rawOCRText)
-      setRawText(cleanedPlate)
-      setOcrProgress('')
-
-      console.log('=== OCR RESULTS ===')
-      console.log('Raw text:', rawOCRText)
-      console.log('Cleaned plate:', cleanedPlate)
-      console.log('Confidence:', confidence)
-      console.log('Is valid:', isValidIndonesianPlate(cleanedPlate))
-      console.log('===================')
-
-      // 8. Validasi hasil
-      if (cleanedPlate.length < 4) {
+      if (!plate) {
         setResult({
           allowed: false,
-          message: `Teks terlalu pendek: "${cleanedPlate || 'kosong'}". Pastikan plat nomor terlihat jelas dan kotak cukup besar.`
+          message: data.message || 'Plat nomor tidak terdeteksi. Pastikan plat terlihat jelas di kamera.'
         })
         return
       }
 
-      // Validasi format plat nomor Indonesia
-      if (!isValidIndonesianPlate(cleanedPlate)) {
+      setRawText(plate)
+
+      if (!isValidIndonesianPlate(plate)) {
         setResult({
           allowed: false,
-          message: `Format tidak valid: "${cleanedPlate}". Pastikan format plat Indonesia (contoh: B 1234 AB atau BP 2112 BE). Hasil mentah OCR: "${rawOCRText.trim()}"`
+          message: `Format tidak valid: "${plate}". Pastikan format plat Indonesia (contoh: B 1234 AB).`
         })
         return
       }
 
-      // Cek confidence
-      if (confidence < 40) {
-        setResult({
-          allowed: false,
-          message: `Confidence rendah (${Math.round(confidence)}%). Hasil: "${cleanedPlate}". Coba perbaiki pencahayaan atau scan ulang.`
-        })
-        return
-      }
-
-      // 9. Kirim ke backend
       setOcrProgress('Memverifikasi ke server...')
-      const res = await axios.post(`${API_URL}/gate/verify`, { plate_number: cleanedPlate })
+      const res = await axios.post(`${API_URL}/gate/verify`, { plate_number: plate })
 
       if (res.data.success) {
-        setResult({
-          allowed: res.data.allowed,
-          message: res.data.message,
-          ticket_info: res.data.ticket_info
-        })
-      }
+  setResult({
+    allowed: res.data.allowed,
+    message: res.data.message,
+    ticket_info: res.data.ticket_info
+  })
+
+  // Kalau valid, suruh Pi buka palang
+  if (res.data.allowed) {
+    axios.post(`${PI_STREAM_URL}/gate/open`).catch(err => {
+      console.error('Gagal buka palang:', err)
+    })
+  }
+}
 
     } catch (err) {
       console.error('Error scanning:', err)
@@ -363,8 +136,8 @@ export default function GateScannerPage() {
   const handleReset = () => {
     setResult(null)
     setRawText('')
-    setPreviewSrc(null)
     setOcrProgress('')
+    setDetectedBox(null)
   }
 
   // --- RENDER UI ---
@@ -372,10 +145,11 @@ export default function GateScannerPage() {
     <div style={{ padding: '20px' }}>
       <div style={{ marginBottom: '24px' }}>
         <h2 style={{ fontSize: '24px', fontWeight: '700', color: '#0c4a6e', marginBottom: '8px' }}>
-          🚦 Gate Scanner (Simulasi IoT)
+          🚦 Pemindai Gerbang (Live dari Raspberry Pi)
         </h2>
         <p style={{ color: '#64748b', fontSize: '14px' }}>
-          Arahkan kamera ke plat nomor. <strong>Klik dan drag mouse</strong> pada area plat untuk membuat kotak scan.
+          Stream langsung dari kamera Pi. <strong>Klik "Pindai Otomatis"</strong> — deteksi & pembacaan
+          plat dilakukan oleh YOLO + OCR langsung di Raspberry Pi, browser tinggal menampilkan hasilnya.
         </p>
       </div>
 
@@ -388,59 +162,48 @@ export default function GateScannerPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px' }}>
 
-        {/* Kiri: Kamera & Bounding Box */}
+        {/* Kiri: Kamera */}
         <div style={{ background: '#fff', borderRadius: '12px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#0c4a6e', margin: 0 }}>Live Camera</h3>
+            <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#0c4a6e', margin: 0 }}>Kamera Langsung (Pi)</h3>
             <div style={{ display: 'flex', gap: '8px' }}>
               <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '600', background: isCameraOn ? '#dcfce7' : '#fee2e2', color: isCameraOn ? '#166534' : '#b91c1c' }}>
-                {isCameraOn ? '● ON' : '○ OFF'}
+                {isCameraOn ? '● AKTIF' : '○ MATI'}
               </span>
               <button onClick={isCameraOn ? stopCamera : startCamera} style={{ padding: '4px 12px', background: isCameraOn ? '#ef4444' : '#22c55e', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer' }}>
-                {isCameraOn ? 'Stop' : 'Start'}
+                {isCameraOn ? 'Berhenti' : 'Mulai'}
               </button>
             </div>
           </div>
 
           <div
-            ref={containerRef}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
             style={{
               position: 'relative',
               background: '#000',
               borderRadius: '8px',
               overflow: 'hidden',
               aspectRatio: '4/3',
-              cursor: isCameraOn ? 'crosshair' : 'not-allowed',
-              userSelect: 'none'
             }}
           >
-            <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
-            <canvas ref={canvasRef} style={{ display: 'none' }} />
-
-            {tempBox && isDrawing && containerRef.current && (
-              <div style={{
-                position: 'absolute',
-                left: `${(Math.min(tempBox.x1, tempBox.x2) / containerRef.current.getBoundingClientRect().width) * 100}%`,
-                top: `${(Math.min(tempBox.y1, tempBox.y2) / containerRef.current.getBoundingClientRect().height) * 100}%`,
-                width: `${(Math.abs(tempBox.x2 - tempBox.x1) / containerRef.current.getBoundingClientRect().width) * 100}%`,
-                height: `${(Math.abs(tempBox.y2 - tempBox.y1) / containerRef.current.getBoundingClientRect().height) * 100}%`,
-                border: '2px dashed #0284c7',
-                backgroundColor: 'rgba(2, 132, 199, 0.2)',
-                pointerEvents: 'none'
-              }} />
+            {isCameraOn && (
+              <img
+                key={streamKey}
+                ref={imgRef}
+                src={`${PI_STREAM_URL}/video_feed`}
+                onError={handleStreamError}
+                onLoad={handleStreamLoad}
+                alt="Live stream Pi"
+                style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
+              />
             )}
 
-            {box && !isDrawing && videoRef.current && containerRef.current && (
+            {detectedBox && (
               <div style={{
                 position: 'absolute',
-                left: `${(box.x1 / videoRef.current.videoWidth) * 100}%`,
-                top: `${(box.y1 / videoRef.current.videoHeight) * 100}%`,
-                width: `${((box.x2 - box.x1) / videoRef.current.videoWidth) * 100}%`,
-                height: `${((box.y2 - box.y1) / videoRef.current.videoHeight) * 100}%`,
+                left: `${(detectedBox.x1 / detectedBox.frameWidth) * 100}%`,
+                top: `${(detectedBox.y1 / detectedBox.frameHeight) * 100}%`,
+                width: `${((detectedBox.x2 - detectedBox.x1) / detectedBox.frameWidth) * 100}%`,
+                height: `${((detectedBox.y2 - detectedBox.y1) / detectedBox.frameHeight) * 100}%`,
                 border: '2px solid #22c55e',
                 backgroundColor: 'rgba(34, 197, 94, 0.1)',
                 pointerEvents: 'none'
@@ -449,7 +212,7 @@ export default function GateScannerPage() {
 
             {!isCameraOn && (
               <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: '14px' }}>
-                Kamera mati. Klik "Start" untuk nyalakan.
+                Stream mati. Klik "Mulai" untuk nyalakan.
               </div>
             )}
 
@@ -464,36 +227,18 @@ export default function GateScannerPage() {
           <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
             <button
               onClick={handleScan}
-              disabled={scanning || !isCameraOn || !box}
-              style={{ flex: 1, padding: '12px', background: (scanning || !isCameraOn || !box) ? '#94a3b8' : '#0284c7', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: (scanning || !isCameraOn || !box) ? 'not-allowed' : 'pointer' }}
+              disabled={scanning || !isCameraOn}
+              style={{ flex: 1, padding: '12px', background: (scanning || !isCameraOn) ? '#94a3b8' : '#0284c7', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: (scanning || !isCameraOn) ? 'not-allowed' : 'pointer' }}
             >
-              {scanning ? `⏳ ${ocrProgress || 'Memproses...'}` : '📸 Scan Plat Nomor'}
-            </button>
-            <button
-              onClick={clearBox}
-              disabled={!box}
-              style={{ padding: '12px 20px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: !box ? 'not-allowed' : 'pointer' }}
-            >
-              Hapus Kotak
+              {scanning ? `⏳ ${ocrProgress || 'Memproses...'}` : '🤖 Pindai Otomatis'}
             </button>
             <button
               onClick={handleReset}
               style={{ padding: '12px 20px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}
             >
-              Reset
+              Atur ulang
             </button>
           </div>
-
-          {previewSrc && (
-            <div style={{ marginTop: '16px' }}>
-              <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>🔍 Preview gambar yang diproses OCR:</p>
-              <img
-                src={previewSrc}
-                alt="OCR Preview"
-                style={{ width: '100%', borderRadius: '6px', border: '1px solid #e2e8f0', imageRendering: 'pixelated' }}
-              />
-            </div>
-          )}
         </div>
 
         {/* Kanan: Hasil */}
