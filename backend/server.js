@@ -128,9 +128,6 @@ app.get('/api/admin/statistics', async (req, res) => {
 });
 
 // ==================== 🚢 API - SCHEDULE ====================
-
-// 1. GET - Ambil semua jadwal (dengan filter rute & tanggal)
-// 1. GET - Ambil semua jadwal
 app.get('/api/jadwal', async (req, res) => {
     try {
         const { rute, tanggal, showAll } = req.query;
@@ -168,17 +165,14 @@ app.get('/api/jadwal', async (req, res) => {
         
         const [jadwal] = await db.promise().query(query, params);
         
-        // Format tanggal di backend langsung jadi DD/MM/YYYY
         const formattedJadwal = jadwal.map(item => {
             let tanggalFormatted = '-'
             if (item.departure_date) {
-                // departure_date sudah string YYYY-MM-DD dari DATE_FORMAT
                 const parts = item.departure_date.split('-')
                 if (parts.length === 3) {
                     tanggalFormatted = `${parts[2]}/${parts[1]}/${parts[0]}`
                 }
             }
-            
             return {
                 ...item,
                 departure_date_formatted: tanggalFormatted
@@ -192,7 +186,6 @@ app.get('/api/jadwal', async (req, res) => {
     }
 });
 
-// 2. POST - Tambah jadwal baru
 app.post('/api/jadwal', async (req, res) => {
     try {
         const { ship_name, departure_time, departure_date, route, price, capacity, remaining_slot, departure_status } = req.body;
@@ -209,7 +202,6 @@ app.post('/api/jadwal', async (req, res) => {
     }
 });
 
-// 3. PUT - Update jadwal
 app.put('/api/jadwal/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -227,12 +219,10 @@ app.put('/api/jadwal/:id', async (req, res) => {
     }
 });
 
-// 4. DELETE - Hapus jadwal
 app.delete('/api/jadwal/:id', async (req, res) => {
     try {
         const { id } = req.params;
         await db.promise().query('DELETE FROM SCHEDULE WHERE schedule_id = ?', [id]);
-        
         res.json({ success: true, message: 'Jadwal berhasil dihapus' });
     } catch (err) {
         console.error('❌ Jadwal DELETE Error:', err);
@@ -285,13 +275,10 @@ app.get('/api/pemesanan', async (req, res) => {
         `;
         
         const params = [];
-        
-        // Filter by date if provided
         if (tanggal) {
             query += ' WHERE DATE(t.created_at) = ?';
             params.push(tanggal);
         }
-        
         query += ' ORDER BY t.created_at DESC';
         
         const [pemesanan] = await db.promise().query(query, params);
@@ -308,7 +295,6 @@ app.put('/api/user/:id', async (req, res) => {
         const { id } = req.params;
         const { username, email, no_whatsapp } = req.body;
         
-        // Cek email tidak duplikat (kecuali milik sendiri)
         const [existing] = await db.promise().query(
             'SELECT user_id FROM USERS WHERE email = ? AND user_id != ?',
             [email, id]
@@ -338,7 +324,6 @@ app.post('/api/pemesanan', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Data tidak lengkap' });
         }
         
-        // Cek jadwal masih tersedia
         const [schedules] = await db.promise().query(
             'SELECT * FROM SCHEDULE WHERE schedule_id = ? AND remaining_slot > 0 AND departure_status = "Terjadwal"',
             [schedule_id]
@@ -348,15 +333,11 @@ app.post('/api/pemesanan', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Jadwal tidak tersedia atau slot penuh' });
         }
         
-        const schedule = schedules[0];
-        
-        // Buat tiket
         const [result] = await db.promise().query(
             'INSERT INTO TICKET (user_id, schedule_id, ticket_status, vehicle_number) VALUES (?, ?, ?, ?)',
             [user_id, schedule_id, 'Sukses', vehicle_number || null]
         );
         
-        // Kurangi remaining slot
         await db.promise().query(
             'UPDATE SCHEDULE SET remaining_slot = remaining_slot - 1 WHERE schedule_id = ?',
             [schedule_id]
@@ -402,7 +383,7 @@ app.get('/api/tickets/user/:userId', async (req, res) => {
     }
 });
 
-// ==================== 🚦 API - GATE SCANNER (Simulasi IoT) ====================
+// ==================== 🚦 API - GATE SCANNER ====================
 app.post('/api/gate/verify', async (req, res) => {
     try {
         const { plate_number } = req.body;
@@ -411,16 +392,14 @@ app.post('/api/gate/verify', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Plat nomor tidak terbaca' });
         }
 
-        // 1. Bersihkan teks dari OCR 
         const cleanPlate = plate_number.replace(/[^A-Z0-9]/g, '').toUpperCase();
 
-        // 2. Cari tiket yang valid di database
         const [tickets] = await db.promise().query(`
             SELECT 
                 t.id_ticket, 
                 t.vehicle_number, 
-                s.departure_date, 
-                s.departure_time, 
+                DATE_FORMAT(s.departure_date, '%Y-%m-%d') as departure_date,
+                TIME_FORMAT(s.departure_time, '%H:%i:%s') as departure_time,
                 s.ship_name, 
                 s.route 
             FROM TICKET t
@@ -430,7 +409,6 @@ app.post('/api/gate/verify', async (req, res) => {
             LIMIT 1
         `, [cleanPlate]);
 
-        // Jika plat nomor tidak punya tiket
         if (tickets.length === 0) {
             return res.json({ 
                 success: true, 
@@ -440,14 +418,28 @@ app.post('/api/gate/verify', async (req, res) => {
         }
 
         const ticket = tickets[0];
-        
-        // 3. Logika Aturan 2 Jam
-        const departureStr = `${ticket.departure_date}T${ticket.departure_time}`;
+
+        // ============ DEBUG LOG ============
+        console.log('\n🔍 DEBUG GATE VERIFY:');
+        console.log('   Plat         :', cleanPlate);
+        console.log('   departure_date dari DB :', ticket.departure_date);
+        console.log('   departure_time dari DB :', ticket.departure_time);
+
+        // Gabungkan tanggal + waktu dengan timezone Jakarta eksplisit
+        const departureStr = `${ticket.departure_date}T${ticket.departure_time}+07:00`;
         const departureTime = new Date(departureStr);
         const now = new Date();
-        
-        const diffMs = departureTime - now; 
-        const diffHours = diffMs / (1000 * 60 * 60); 
+
+        console.log('   departureStr  :', departureStr);
+        console.log('   departureTime :', departureTime.toLocaleString('id-ID'));
+        console.log('   now           :', now.toLocaleString('id-ID'));
+
+        const diffMs    = departureTime - now;
+        const diffHours = diffMs / (1000 * 60 * 60);
+
+        console.log('   diffHours     :', diffHours.toFixed(2));
+        console.log('=====================================\n');
+        // ============ END DEBUG ============
 
         let allowed = false;
         let message = '';
@@ -455,7 +447,9 @@ app.post('/api/gate/verify', async (req, res) => {
         if (diffHours < 0) {
             message = 'Kapal sudah berangkat! Tiket hangus.';
         } else if (diffHours > 2) {
-            message = `Terlalu awal! Waktu berangkat masih ${Math.floor(diffHours)} jam lagi. Silakan putar balik agar tidak menumpuk di parkiran.`;
+            const jamLagi = Math.floor(diffHours);
+            const menitLagi = Math.floor((diffHours - jamLagi) * 60);
+            message = `Terlalu awal! Waktu berangkat masih ${jamLagi} jam ${menitLagi} menit lagi. Silakan putar balik agar tidak menumpuk di parkiran.`;
         } else {
             allowed = true;
             const diffMinutes = Math.floor(diffHours * 60);

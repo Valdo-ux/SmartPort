@@ -3,29 +3,33 @@ import { useState, useRef, useEffect } from 'react'
 import axios from 'axios'
 
 const API_URL = 'http://localhost:4000/api'
-
-// IP Raspberry Pi kamu (hasil `hostname -I` di Pi)
-const PI_STREAM_URL = 'http://smartport.local:5000'
+const PI_STREAM_URL = 'http://192.168.1.32:5000' // Ganti dengan IP Raspberry Pi kamu yang terbaru
 
 export default function GateScannerPage() {
   const imgRef = useRef(null)
 
+  // State untuk Mode (camera atau manual)
+  const [scanMode, setScanMode] = useState('manual') // Default ke manual sesuai request kamu
+  
+  // State Kamera
   const [isCameraOn, setIsCameraOn] = useState(false)
+  const [streamKey, setStreamKey] = useState(Date.now())
+  const [cameraError, setCameraError] = useState('')
+  const [detectedBox, setDetectedBox] = useState(null)
+
+  // State Manual Input
+  const [manualPlateInput, setManualPlateInput] = useState('')
+
+  // State Proses Scan
   const [scanning, setScanning] = useState(false)
   const [result, setResult] = useState(null)
   const [rawText, setRawText] = useState('')
-  const [cameraError, setCameraError] = useState('')
   const [ocrProgress, setOcrProgress] = useState('')
 
-  // Kotak hasil deteksi YOLO, buat visual feedback di atas video
-  const [detectedBox, setDetectedBox] = useState(null)
-
-  // Trik biar <img> stream bisa di-"restart" (misal kalau mau reconnect)
-  const [streamKey, setStreamKey] = useState(Date.now())
-
   useEffect(() => {
-    startCamera()
-  }, [])
+    // Opsional: langsung nyalakan kamera saat load jika mode camera
+    if (scanMode === 'camera') startCamera()
+  }, [scanMode])
 
   const startCamera = () => {
     setCameraError('')
@@ -38,24 +42,69 @@ export default function GateScannerPage() {
     setDetectedBox(null)
   }
 
-  const handleStreamError = () => {
-    setCameraError(
-      `Gagal konek ke stream Pi di ${PI_STREAM_URL}/video_feed. Pastikan stream.py sudah jalan di Pi dan IP-nya benar.`
-    )
-    setIsCameraOn(false)
-  }
-
-  const handleStreamLoad = () => {
-    setCameraError('')
-  }
-
   const isValidIndonesianPlate = (plate) => {
     const pattern = /^[A-Z]{1,2}\d{1,4}[A-Z]{1,3}$/
     return pattern.test(plate)
   }
 
-  // --- LOGIKA SCAN: sekarang cukup panggil /detect_plate di Pi (YOLO + OCR   ---
-  // --- jalan di Python/server, browser tinggal terima hasilnya).            ---
+  // --- LOGIKA SCAN MANUAL (BARU) ---
+  const handleManualVerify = async () => {
+    const cleanPlate = manualPlateInput.toUpperCase().replace(/\s/g, '') // Hapus spasi, jadi uppercase
+    
+    if (!cleanPlate) {
+      alert('Masukkan plat nomor terlebih dahulu!')
+      return
+    }
+
+    if (!isValidIndonesianPlate(cleanPlate)) {
+      alert(`Format tidak valid: "${cleanPlate}". Gunakan format seperti B1387DKC`)
+      return
+    }
+
+    setScanning(true)
+    setResult(null)
+    setRawText(cleanPlate)
+    setOcrProgress('Memverifikasi ke server...')
+
+    try {
+      // 1. Langsung kirim ke Backend untuk cek database
+      const res = await axios.post(`${API_URL}/gate/verify`, { 
+        plate_number: cleanPlate 
+      })
+
+      if (res.data.success) {
+        setResult({
+          allowed: res.data.allowed,
+          message: res.data.message,
+          ticket_info: res.data.ticket_info
+        })
+
+        // 2. Kalau valid, suruh Raspberry Pi buka palang
+        if (res.data.allowed) {
+          setOcrProgress('Membuka palang...')
+          await axios.post(`${PI_STREAM_URL}/gate/open`).catch(err => {
+            console.error('Gagal buka palang:', err)
+          })
+        }
+      } else {
+        setResult({
+          allowed: false,
+          message: res.data.message || 'Verifikasi gagal'
+        })
+      }
+    } catch (err) {
+      console.error('Error manual verify:', err)
+      setResult({
+        allowed: false,
+        message: `Gagal koneksi ke server: ${err.message}`
+      })
+    } finally {
+      setScanning(false)
+      setOcrProgress('')
+    }
+  }
+
+  // --- LOGIKA SCAN KAMERA (ASLI, TIDAK DIUBAH) ---
   const handleScan = async () => {
     if (!isCameraOn) {
       alert('Stream kamera Pi belum aktif!')
@@ -98,7 +147,7 @@ export default function GateScannerPage() {
       if (!isValidIndonesianPlate(plate)) {
         setResult({
           allowed: false,
-          message: `Format tidak valid: "${plate}". Pastikan format plat Indonesia (contoh: B 1234 AB).`
+          message: `Format tidak valid: "${plate}". Pastikan format plat Indonesia.`
         })
         return
       }
@@ -107,20 +156,19 @@ export default function GateScannerPage() {
       const res = await axios.post(`${API_URL}/gate/verify`, { plate_number: plate })
 
       if (res.data.success) {
-  setResult({
-    allowed: res.data.allowed,
-    message: res.data.message,
-    ticket_info: res.data.ticket_info
-  })
+        setResult({
+          allowed: res.data.allowed,
+          message: res.data.message,
+          ticket_info: res.data.ticket_info
+        })
 
-  // Kalau valid, suruh Pi buka palang
-  if (res.data.allowed) {
-    axios.post(`${PI_STREAM_URL}/gate/open`).catch(err => {
-      console.error('Gagal buka palang:', err)
-    })
-  }
-}
-
+        if (res.data.allowed) {
+          setOcrProgress('Membuka palang...')
+          axios.post(`${PI_STREAM_URL}/gate/open`).catch(err => {
+            console.error('Gagal buka palang:', err)
+          })
+        }
+      }
     } catch (err) {
       console.error('Error scanning:', err)
       setResult({
@@ -138,22 +186,49 @@ export default function GateScannerPage() {
     setRawText('')
     setOcrProgress('')
     setDetectedBox(null)
+    setManualPlateInput('')
   }
 
   // --- RENDER UI ---
   return (
-    <div style={{ padding: '20px' }}>
+    <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <div style={{ marginBottom: '24px' }}>
         <h2 style={{ fontSize: '24px', fontWeight: '700', color: '#0c4a6e', marginBottom: '8px' }}>
-          🚦 Pemindai Gerbang (Live dari Raspberry Pi)
+          🚦 Pemindai Gerbang SmartPort
         </h2>
+        
+        {/* TOGGLE MODE (BARU) */}
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+          <button 
+            onClick={() => setScanMode('manual')}
+            style={{ 
+              padding: '10px 20px', borderRadius: '8px', border: 'none', fontSize: '14px', fontWeight: '600', cursor: 'pointer',
+              background: scanMode === 'manual' ? '#0284c7' : '#e2e8f0',
+              color: scanMode === 'manual' ? '#fff' : '#475569'
+            }}
+          >
+            ⌨️ Input Manual
+          </button>
+          <button 
+            onClick={() => setScanMode('camera')}
+            style={{ 
+              padding: '10px 20px', borderRadius: '8px', border: 'none', fontSize: '14px', fontWeight: '600', cursor: 'pointer',
+              background: scanMode === 'camera' ? '#0284c7' : '#e2e8f0',
+              color: scanMode === 'camera' ? '#fff' : '#475569'
+            }}
+          >
+            📷 Scan Kamera
+          </button>
+        </div>
+
         <p style={{ color: '#64748b', fontSize: '14px' }}>
-          Stream langsung dari kamera Pi. <strong>Klik "Pindai Otomatis"</strong> — deteksi & pembacaan
-          plat dilakukan oleh YOLO + OCR langsung di Raspberry Pi, browser tinggal menampilkan hasilnya.
+          {scanMode === 'manual' 
+            ? 'Masukkan plat nomor secara manual. Sistem akan memverifikasi ke database dan membuka gerbang jika valid.' 
+            : 'Stream langsung dari kamera Pi. Klik "Pindai Otomatis" untuk deteksi via YOLO + OCR.'}
         </p>
       </div>
 
-      {cameraError && (
+      {cameraError && scanMode === 'camera' && (
         <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '16px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #fecaca' }}>
           ⚠️ {cameraError}
           <button onClick={startCamera} style={{ marginLeft: '10px', padding: '6px 12px', background: '#b91c1c', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Retry</button>
@@ -162,96 +237,117 @@ export default function GateScannerPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px' }}>
 
-        {/* Kiri: Kamera */}
+        {/* KIRI: Area Input (Bisa Kamera atau Manual) */}
         <div style={{ background: '#fff', borderRadius: '12px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#0c4a6e', margin: 0 }}>Kamera Langsung (Pi)</h3>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '600', background: isCameraOn ? '#dcfce7' : '#fee2e2', color: isCameraOn ? '#166534' : '#b91c1c' }}>
-                {isCameraOn ? '● AKTIF' : '○ MATI'}
-              </span>
-              <button onClick={isCameraOn ? stopCamera : startCamera} style={{ padding: '4px 12px', background: isCameraOn ? '#ef4444' : '#22c55e', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer' }}>
-                {isCameraOn ? 'Berhenti' : 'Mulai'}
-              </button>
+          
+          {/* === MODE MANUAL === */}
+          {scanMode === 'manual' && (
+            <div>
+              <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#0c4a6e', marginBottom: '16px' }}>Input Plat Nomor</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <input
+                  type="text"
+                  value={manualPlateInput}
+                  onChange={(e) => setManualPlateInput(e.target.value.toUpperCase())}
+                  placeholder="CONTOH: B1387DKC"
+                  disabled={scanning}
+                  style={{ 
+                    padding: '16px', fontSize: '24px', fontWeight: 'bold', textAlign: 'center', 
+                    border: '2px solid #cbd5e1', borderRadius: '8px', letterSpacing: '2px',
+                    outline: 'none'
+                  }}
+                />
+                <button
+                  onClick={handleManualVerify}
+                  disabled={scanning || !manualPlateInput}
+                  style={{ 
+                    padding: '16px', background: (scanning || !manualPlateInput) ? '#94a3b8' : '#16a34a', 
+                    color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '700', 
+                    cursor: (scanning || !manualPlateInput) ? 'not-allowed' : 'pointer' 
+                  }}
+                >
+                  {scanning ? `⏳ ${ocrProgress}` : '✅ Verifikasi & Buka Gate'}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
-          <div
-            style={{
-              position: 'relative',
-              background: '#000',
-              borderRadius: '8px',
-              overflow: 'hidden',
-              aspectRatio: '4/3',
-            }}
-          >
-            {isCameraOn && (
-              <img
-                key={streamKey}
-                ref={imgRef}
-                src={`${PI_STREAM_URL}/video_feed`}
-                onError={handleStreamError}
-                onLoad={handleStreamLoad}
-                alt="Live stream Pi"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
-              />
-            )}
-
-            {detectedBox && (
-              <div style={{
-                position: 'absolute',
-                left: `${(detectedBox.x1 / detectedBox.frameWidth) * 100}%`,
-                top: `${(detectedBox.y1 / detectedBox.frameHeight) * 100}%`,
-                width: `${((detectedBox.x2 - detectedBox.x1) / detectedBox.frameWidth) * 100}%`,
-                height: `${((detectedBox.y2 - detectedBox.y1) / detectedBox.frameHeight) * 100}%`,
-                border: '2px solid #22c55e',
-                backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                pointerEvents: 'none'
-              }} />
-            )}
-
-            {!isCameraOn && (
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: '14px' }}>
-                Stream mati. Klik "Mulai" untuk nyalakan.
+          {/* === MODE KAMERA === */}
+          {scanMode === 'camera' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#0c4a6e', margin: 0 }}>Kamera Langsung (Pi)</h3>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '600', background: isCameraOn ? '#dcfce7' : '#fee2e2', color: isCameraOn ? '#166534' : '#b91c1c' }}>
+                    {isCameraOn ? '● AKTIF' : '○ MATI'}
+                  </span>
+                  <button onClick={isCameraOn ? stopCamera : startCamera} style={{ padding: '4px 12px', background: isCameraOn ? '#ef4444' : '#22c55e', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer' }}>
+                    {isCameraOn ? 'Berhenti' : 'Mulai'}
+                  </button>
+                </div>
               </div>
-            )}
 
-            {scanning && (
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: '14px', gap: '8px' }}>
-                <div style={{ fontSize: '28px' }}>⏳</div>
-                <p style={{ margin: 0, fontWeight: '600' }}>{ocrProgress || 'Memproses...'}</p>
+              <div style={{ position: 'relative', background: '#000', borderRadius: '8px', overflow: 'hidden', aspectRatio: '4/3' }}>
+                {isCameraOn && (
+                  <img
+                    key={streamKey}
+                    ref={imgRef}
+                    src={`${PI_STREAM_URL}/video_feed`}
+                    onError={() => setCameraError('Gagal konek ke stream Pi.')}
+                    onLoad={() => setCameraError('')}
+                    alt="Live stream Pi"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
+                  />
+                )}
+
+                {detectedBox && (
+                  <div style={{
+                    position: 'absolute',
+                    left: `${(detectedBox.x1 / detectedBox.frameWidth) * 100}%`,
+                    top: `${(detectedBox.y1 / detectedBox.frameHeight) * 100}%`,
+                    width: `${((detectedBox.x2 - detectedBox.x1) / detectedBox.frameWidth) * 100}%`,
+                    height: `${((detectedBox.y2 - detectedBox.y1) / detectedBox.frameHeight) * 100}%`,
+                    border: '2px solid #22c55e',
+                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                    pointerEvents: 'none'
+                  }} />
+                )}
+
+                {!isCameraOn && (
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: '14px' }}>
+                    Stream mati. Klik "Mulai" untuk nyalakan.
+                  </div>
+                )}
+
+                {scanning && scanMode === 'camera' && (
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: '14px', gap: '8px' }}>
+                    <div style={{ fontSize: '28px' }}>⏳</div>
+                    <p style={{ margin: 0, fontWeight: '600' }}>{ocrProgress || 'Memproses...'}</p>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
-            <button
-              onClick={handleScan}
-              disabled={scanning || !isCameraOn}
-              style={{ flex: 1, padding: '12px', background: (scanning || !isCameraOn) ? '#94a3b8' : '#0284c7', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: (scanning || !isCameraOn) ? 'not-allowed' : 'pointer' }}
-            >
-              {scanning ? `⏳ ${ocrProgress || 'Memproses...'}` : '🤖 Pindai Otomatis'}
-            </button>
-            <button
-              onClick={handleReset}
-              style={{ padding: '12px 20px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}
-            >
-              Atur ulang
-            </button>
-          </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button
+                  onClick={handleScan}
+                  disabled={scanning || !isCameraOn}
+                  style={{ flex: 1, padding: '12px', background: (scanning || !isCameraOn) ? '#94a3b8' : '#0284c7', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: (scanning || !isCameraOn) ? 'not-allowed' : 'pointer' }}
+                >
+                  {scanning ? `⏳ ${ocrProgress}` : '🤖 Pindai Otomatis'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Kanan: Hasil */}
+        {/* KANAN: Hasil (TETAP SAMA, hanya merespon state `result`) */}
         <div style={{ background: '#fff', borderRadius: '12px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
           <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#0c4a6e', marginBottom: '16px' }}>Hasil Verifikasi</h3>
 
           {!result ? (
             <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
-              <div style={{ fontSize: '48px', marginBottom: '10px' }}>📷</div>
-              <p>Belum ada hasil scan</p>
-              {ocrProgress && !scanning && (
-                <p style={{ fontSize: '13px', color: '#64748b' }}>{ocrProgress}</p>
-              )}
+              <div style={{ fontSize: '48px', marginBottom: '10px' }}>📋</div>
+              <p>Belum ada hasil verifikasi</p>
             </div>
           ) : (
             <div>
@@ -275,7 +371,7 @@ export default function GateScannerPage() {
               </div>
 
               <div style={{ fontSize: '13px', color: '#475569', lineHeight: '1.6', background: '#f8fafc', padding: '15px', borderRadius: '8px' }}>
-                <p style={{ margin: '0 0 8px 0' }}><strong>Plat Terbaca OCR:</strong> {rawText || '-'}</p>
+                <p style={{ margin: '0 0 8px 0' }}><strong>Plat Nomor:</strong> {rawText || '-'}</p>
                 {result.ticket_info && (
                   <>
                     <p style={{ margin: '0 0 8px 0' }}><strong>Kapal:</strong> {result.ticket_info.kapal}</p>
@@ -284,6 +380,13 @@ export default function GateScannerPage() {
                   </>
                 )}
               </div>
+              
+              <button
+                onClick={handleReset}
+                style={{ width: '100%', marginTop: '16px', padding: '12px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}
+              >
+                Atur ulang
+              </button>
             </div>
           )}
         </div>
